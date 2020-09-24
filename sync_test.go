@@ -8,18 +8,24 @@ import (
 )
 
 func Test(t *testing.T) {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10 *time.Second))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	defer cancel()
-	workerPool := sync.NewWorkerPool(ctx, 5)
-	for x := 0; x < 10; x++ {
-		y := x
+	workerPool := sync.NewWorkerPool(ctx, 100)
+	workerPool.Go(func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			t.Logf("current: %v finished: %v", workerPool.Current(), workerPool.Finished())
+		}
+		return nil
+	})
+	for x := 0; x < 10000; x++ {
 		workerPool.Go(func(ctx context.Context) error {
-			t.Logf("current: %v val: %v", workerPool.Current(), y)
-			time.Sleep(1 *time.Second)
+			time.Sleep(200 * time.Millisecond)
 			return nil
 		})
 	}
-	t.Logf("current: %v", workerPool.Current())
 	if errs := workerPool.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Logf("workerPool error: %s", err)

@@ -22,13 +22,13 @@ goroutines.
 #### func  NewWorkerPool
 
 ```go
-func NewWorkerPool(ctx context.Context, max int64) *WorkerPool
+func NewWorkerPool(ctx context.Context, max uint64) *WorkerPool
 ```
 
 #### func (*WorkerPool) Add
 
 ```go
-func (p *WorkerPool) Add(delta int64)
+func (p *WorkerPool) Add(delta uint64)
 ```
 
 #### func (*WorkerPool) AddErr
@@ -47,13 +47,19 @@ Cancel cancels every functions context
 #### func (*WorkerPool) Current
 
 ```go
-func (p *WorkerPool) Current() int64
+func (p *WorkerPool) Current() uint64
 ```
 
 #### func (*WorkerPool) Done
 
 ```go
 func (p *WorkerPool) Done()
+```
+
+#### func (*WorkerPool) Finished
+
+```go
+func (p *WorkerPool) Finished() bool
 ```
 
 #### func (*WorkerPool) Go
