@@ -2,7 +2,7 @@ package sync_test
 
 import (
 	"context"
-	"gitlab.com/ftdr/sync"
+	"github.com/autom8ter/sync"
 	"testing"
 	"time"
 )

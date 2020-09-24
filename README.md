@@ -1,6 +1,6 @@
 # sync
 --
-    import "gitlab.com/ftdr/sync"
+    import "github.com/autom8ter/sync"
 
 
 ## Usage
