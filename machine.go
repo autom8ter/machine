@@ -1,6 +1,6 @@
 //go:generate godocdown -o README.md
 
-package sync
+package machine
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 
 var Cancel = errors.New("sync: cancel")
 
-// WorkerPool is just like sync.WaitGroup, except it lets you throttle max goroutines.
-type WorkerPool struct {
+// Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
+type Machine struct {
 	cancel    func()
 	ctx       context.Context
 	errs      []error
@@ -22,10 +22,10 @@ type WorkerPool struct {
 	closeOnce sync.Once
 }
 
-func NewWorkerPool(ctx context.Context, max uint64) *WorkerPool {
+func New(ctx context.Context, max uint64) *Machine {
 	ctx, cancel := context.WithCancel(ctx)
 	current := uint64(0)
-	return &WorkerPool{
+	return &Machine{
 		cancel:    cancel,
 		ctx:       ctx,
 		errs:      nil,
@@ -35,11 +35,11 @@ func NewWorkerPool(ctx context.Context, max uint64) *WorkerPool {
 	}
 }
 
-func (p *WorkerPool) Current() uint64 {
+func (p *Machine) Current() uint64 {
 	return atomic.LoadUint64(p.current)
 }
 
-func (p *WorkerPool) Add(delta uint64) {
+func (p *Machine) Add(delta uint64) {
 	for p.Current() >= p.max {
 		time.Sleep(50 * time.Nanosecond)
 	}
@@ -50,7 +50,7 @@ func (p *WorkerPool) Add(delta uint64) {
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (p *WorkerPool) Go(f func(ctx context.Context) error) {
+func (p *Machine) Go(f func(ctx context.Context) error) {
 	if p.ctx.Err() != nil {
 		return
 	}
@@ -69,15 +69,15 @@ func (p *WorkerPool) Go(f func(ctx context.Context) error) {
 	}()
 }
 
-func (p *WorkerPool) AddErr(err error) {
+func (p *Machine) AddErr(err error) {
 	p.errs = append(p.errs, err)
 }
 
-func (p *WorkerPool) Done() {
+func (p *Machine) Done() {
 	atomic.AddUint64(p.current, ^uint64(0))
 }
 
-func (p *WorkerPool) Wait() []error {
+func (p *Machine) Wait() []error {
 	for !p.Finished() {
 		select {
 		case <-p.ctx.Done():
@@ -88,7 +88,7 @@ func (p *WorkerPool) Wait() []error {
 }
 
 // Cancel cancels every functions context
-func (p *WorkerPool) Cancel() {
+func (p *Machine) Cancel() {
 	p.closeOnce.Do(func() {
 		if p.cancel != nil {
 			p.cancel()
@@ -96,6 +96,6 @@ func (p *WorkerPool) Cancel() {
 	})
 }
 
-func (p *WorkerPool) Finished() bool {
+func (p *Machine) Finished() bool {
 	return p.Current() == 0
 }

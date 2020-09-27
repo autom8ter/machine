@@ -1,8 +1,8 @@
-package sync_test
+package machine_test
 
 import (
 	"context"
-	"github.com/autom8ter/sync"
+	"github.com/autom8ter/machine"
 	"testing"
 	"time"
 )
@@ -10,16 +10,7 @@ import (
 func Test(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	defer cancel()
-	workerPool := sync.NewWorkerPool(ctx, 100)
-	workerPool.Go(func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-			break
-		default:
-			t.Logf("current: %v finished: %v", workerPool.Current(), workerPool.Finished())
-		}
-		return nil
-	})
+	workerPool := machine.New(ctx, 100)
 	for x := 0; x < 10000; x++ {
 		workerPool.Go(func(ctx context.Context) error {
 			time.Sleep(200 * time.Millisecond)

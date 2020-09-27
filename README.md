@@ -1,6 +1,6 @@
-# sync
+# machine
 --
-    import "github.com/autom8ter/sync"
+    import "github.com/autom8ter/machine"
 
 
 ## Usage
@@ -9,63 +9,62 @@
 var Cancel = errors.New("sync: cancel")
 ```
 
-#### type WorkerPool
+#### type Machine
 
 ```go
-type WorkerPool struct {
+type Machine struct {
 }
 ```
 
-WorkerPool is just like sync.WaitGroup, except it lets you throttle max
-goroutines.
+Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
 
-#### func  NewWorkerPool
+#### func  New
 
 ```go
-func NewWorkerPool(ctx context.Context, max uint64) *WorkerPool
+func New(ctx context.Context, max uint64) *Machine
 ```
 
-#### func (*WorkerPool) Add
+#### func (*Machine) Add
 
 ```go
-func (p *WorkerPool) Add(delta uint64)
+func (p *Machine) Add(delta uint64)
 ```
 
-#### func (*WorkerPool) AddErr
+#### func (*Machine) AddErr
 
 ```go
-func (p *WorkerPool) AddErr(err error)
+func (p *Machine) AddErr(err error)
 ```
 
-#### func (*WorkerPool) Cancel
+#### func (*Machine) Cancel
 
 ```go
-func (p *WorkerPool) Cancel()
+func (p *Machine) Cancel()
 ```
 Cancel cancels every functions context
 
-#### func (*WorkerPool) Current
+#### func (*Machine) Current
 
 ```go
-func (p *WorkerPool) Current() uint64
+func (p *Machine) Current() uint64
 ```
 
-#### func (*WorkerPool) Done
+#### func (*Machine) Done
 
 ```go
-func (p *WorkerPool) Done()
+func (p *Machine) Done()
 ```
 
-#### func (*WorkerPool) Finished
+#### func (*Machine) Finished
 
 ```go
-func (p *WorkerPool) Finished() bool
+func (p *Machine) Finished() bool
 ```
 
-#### func (*WorkerPool) Go
+#### func (*Machine) Go
 
 ```go
-func (p *WorkerPool) Go(f func(ctx context.Context) error)
+func (p *Machine) Go(f func(ctx context.Context) error)
 ```
 Go calls the given function in a new goroutine.
 
@@ -73,8 +72,8 @@ The first call to return a non-nil error who's cause is CancelGroup cancels the
 context of every job. All errors that are not CancelGroup will be returned by
 Wait.
 
-#### func (*WorkerPool) Wait
+#### func (*Machine) Wait
 
 ```go
-func (p *WorkerPool) Wait() []error
+func (p *Machine) Wait() []error
 ```

@@ -1,3 +1,5 @@
+github.com/autom8ter/sync v0.0.0 h1:E+Kcj7FzradTM2mG/0q+rZTMcgPO1xizSPArlFo9/ho=
+github.com/autom8ter/sync v0.0.0/go.mod h1:EAU9lp6XK29YSCXQeqaJsrQHuxZRKgtVJ/gHXVT7tck=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
