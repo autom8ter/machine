@@ -8,6 +8,7 @@
 ```go
 var Cancel = errors.New("[machine] cancel")
 ```
+if a goroutine returns this error, every goroutines context will be cancelled
 
 #### type Machine
 
@@ -30,7 +31,7 @@ New Creates a new machine instance
 ```go
 func (p *Machine) Cancel()
 ```
-Cancel cancels every functions context
+Cancel cancels every goroutines context
 
 #### func (*Machine) Current
 
@@ -55,19 +56,23 @@ Wait.
 ```go
 func (m *Machine) Stats() Stats
 ```
+Stats returns Goroutine information
 
 #### func (*Machine) Wait
 
 ```go
 func (p *Machine) Wait() []error
 ```
+Wait waites for all goroutines to exit
 
 #### type Opts
 
 ```go
 type Opts struct {
+	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
-	Debug       bool
+	// Debug enables debug logs
+	Debug bool
 }
 ```
 
@@ -106,3 +111,5 @@ type Stats struct {
 	Routines map[string]Routine
 }
 ```
+
+Stats holds information about goroutines

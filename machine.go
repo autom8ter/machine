@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// if a goroutine returns this error, every goroutines context will be cancelled
 var Cancel = errors.New("[machine] cancel")
 
 // Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
@@ -120,7 +121,9 @@ func (g *goRoutine) Subscriptions() []string {
 
 // Opts are options when creating a machine instance
 type Opts struct {
+	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
+	// Debug enables debug logs
 	Debug       bool
 }
 
@@ -250,6 +253,7 @@ func (p *Machine) closeRoutine(id string) {
 	delete(p.routines, id)
 }
 
+// Wait waites for all goroutines to exit
 func (p *Machine) Wait() []error {
 	for !(p.Current() > 0) {
 	}
@@ -257,7 +261,7 @@ func (p *Machine) Wait() []error {
 	return p.errs
 }
 
-// Cancel cancels every functions context
+// Cancel cancels every goroutines context
 func (p *Machine) Cancel() {
 	p.closeOnce.Do(func() {
 		if p.cancel != nil {
@@ -266,11 +270,13 @@ func (p *Machine) Cancel() {
 	})
 }
 
+// Stats holds information about goroutines
 type Stats struct {
 	Count    int
 	Routines map[string]Routine
 }
 
+// Stats returns Goroutine information
 func (m *Machine) Stats() Stats {
 	copied := map[string]Routine{}
 	m.routineMu.RLock()
