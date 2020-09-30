@@ -139,6 +139,10 @@ func (p *Machine) addErr(err error) {
 	p.errs = append(p.errs, err)
 }
 
+func (p *Machine) Cache() Cache {
+	return p.cache
+}
+
 func (p *Machine) closeRoutine(id string) {
 	p.routineMu.Lock()
 	delete(p.routines, id)
