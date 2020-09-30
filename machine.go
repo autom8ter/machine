@@ -4,86 +4,143 @@ package machine
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"github.com/pkg/errors"
+	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-var Cancel = errors.New("sync: cancel")
+var Cancel = errors.New("[machine] cancel")
 
 // Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
 type Machine struct {
-	cancel    func()
-	ctx       context.Context
-	errs      []error
-	current   *uint64
-	max       uint64
-	closeOnce sync.Once
+	cancel     func()
+	ctx        context.Context
+	errs       []error
+	routineMu  sync.RWMutex
+	routines   map[string]*Routine
+	max        int
+	closeOnce  sync.Once
+	debug      bool
+	workerChan chan *worker
 }
 
-func New(ctx context.Context, max uint64) *Machine {
+type worker struct {
+	tags []string
+	fn   func(ctx context.Context) error
+}
+
+type Routine struct {
+	ID       string
+	Tags     []string
+	Start    time.Time
+	Duration time.Duration
+	dataChan chan interface{}
+}
+
+type Opts struct {
+	MaxRoutines int
+	Debug       bool
+}
+
+func New(ctx context.Context, opts *Opts) (*Machine, error) {
+	if opts == nil {
+		opts = &Opts{}
+	}
+	if opts.MaxRoutines <= 0 {
+		opts.MaxRoutines = 10000
+	}
 	ctx, cancel := context.WithCancel(ctx)
-	current := uint64(0)
-	return &Machine{
-		cancel:    cancel,
-		ctx:       ctx,
-		errs:      nil,
-		current:   &current,
-		max:       max,
-		closeOnce: sync.Once{},
+	m := &Machine{
+		cancel:     cancel,
+		ctx:        ctx,
+		errs:       nil,
+		routineMu:  sync.RWMutex{},
+		routines:   map[string]*Routine{},
+		max:        opts.MaxRoutines,
+		closeOnce:  sync.Once{},
+		debug:      false,
+		workerChan: make(chan *worker, opts.MaxRoutines),
 	}
+	workerLisId := m.addRoutine([]string{"worker queue"})
+	go func() {
+		defer m.closeRoutine(workerLisId)
+		child1, cancel1 := context.WithCancel(m.ctx)
+		defer cancel1()
+		for {
+			select {
+			case <-child1.Done():
+				return
+			case work := <-m.workerChan:
+				id := m.addRoutine(work.tags)
+				go func() {
+					defer m.closeRoutine(id)
+					child2, cancel2 := context.WithCancel(child1)
+					defer cancel2()
+					if err := work.fn(child2); err != nil {
+						if errors.Cause(err) == Cancel {
+							m.Cancel()
+						} else {
+							m.addErr(err)
+						}
+					}
+				}()
+			}
+		}
+	}()
+	return m, nil
 }
 
-func (p *Machine) Current() uint64 {
-	return atomic.LoadUint64(p.current)
+// Current returns current managed goroutine count
+func (p *Machine) Current() int {
+	p.routineMu.Lock()
+	defer p.routineMu.Unlock()
+	return len(p.routines)
 }
 
-func (p *Machine) Add(delta uint64) {
-	for p.Current() >= p.max {
-		time.Sleep(50 * time.Nanosecond)
+func (p *Machine) addRoutine(tags []string) string {
+	var x int
+	for x = len(p.routines); x >= p.max && p.ctx.Err() == nil; x = p.Current() {
 	}
-	atomic.AddUint64(p.current, delta)
+	id := uuid()
+	p.routineMu.Lock()
+	p.routines[id] = &Routine{
+		ID:       id,
+		Tags:     tags,
+		Start:    time.Now(),
+		dataChan: make(chan interface{}),
+	}
+	p.routineMu.Unlock()
+	return id
 }
 
 // Go calls the given function in a new goroutine.
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (p *Machine) Go(f func(ctx context.Context) error) {
-	if p.ctx.Err() != nil {
-		return
+func (p *Machine) Go(f func(ctx context.Context) error, tags ...string) {
+	p.workerChan <- &worker{
+		tags: tags,
+		fn:   f,
 	}
-	p.Add(1)
-	go func() {
-		defer p.Done()
-		child, cancel := context.WithCancel(p.ctx)
-		defer cancel()
-		if err := f(child); err != nil {
-			if errors.Cause(err) == Cancel {
-				p.Cancel()
-			} else {
-				p.AddErr(err)
-			}
-		}
-	}()
 }
 
-func (p *Machine) AddErr(err error) {
+func (p *Machine) addErr(err error) {
 	p.errs = append(p.errs, err)
 }
 
-func (p *Machine) Done() {
-	atomic.AddUint64(p.current, ^uint64(0))
+func (p *Machine) closeRoutine(id string) {
+	p.routineMu.Lock()
+	delete(p.routines, id)
+	p.routineMu.Unlock()
 }
 
 func (p *Machine) Wait() []error {
 	for !p.Finished() {
-		select {
-		case <-p.ctx.Done():
-			p.Cancel()
-		}
 	}
+	p.Cancel()
 	return p.errs
 }
 
@@ -98,4 +155,42 @@ func (p *Machine) Cancel() {
 
 func (p *Machine) Finished() bool {
 	return p.Current() == 0
+}
+
+type Stats struct {
+	Count    int
+	Routines map[string]*Routine
+}
+
+func (m *Machine) Stats() Stats {
+	copied := map[string]*Routine{}
+	m.routineMu.RLock()
+	defer m.routineMu.RUnlock()
+	for k, v := range m.routines {
+		if v != nil {
+			v.Duration = time.Since(v.Start)
+			copied[k] = v
+		}
+	}
+	return Stats{
+		Routines: copied,
+		Count:    len(copied),
+	}
+}
+
+func (p *Machine) debugf(format string, a ...interface{}) {
+	if p.debug {
+		fmt.Printf(format, a...)
+	}
+}
+
+func uuid() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	uuid := fmt.Sprintf("%x-%x-%x-%x-%x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+	return uuid
 }
