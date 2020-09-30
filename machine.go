@@ -5,8 +5,8 @@ package machine
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
-	"github.com/pkg/errors"
 	"log"
 	"sync"
 	"time"
@@ -150,7 +150,7 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 					defer m.closeRoutine(workerRoutine.ID())
 					defer cancel2()
 					if err := work.fn(workerRoutine); err != nil {
-						if errors.Cause(err) == Cancel {
+						if errors.Unwrap(err) == Cancel {
 							m.Cancel()
 						} else {
 							m.addErr(err)
