@@ -41,7 +41,7 @@ Current returns current managed goroutine count
 #### func (*Machine) Go
 
 ```go
-func (p *Machine) Go(f func(ctx context.Context) error, tags ...string)
+func (p *Machine) Go(f func(routine Routine) error, tags ...string)
 ```
 Go calls the given function in a new goroutine.
 
@@ -74,11 +74,14 @@ type Opts struct {
 #### type Routine
 
 ```go
-type Routine struct {
-	ID       string
-	Tags     []string
-	Start    time.Time
-	Duration time.Duration
+type Routine interface {
+	Context() context.Context
+	ID() string
+	Tags() []string
+	Start() time.Time
+	Duration() time.Duration
+	Publish(channel string, obj interface{})
+	Subscribe(channel string) chan interface{}
 }
 ```
 
@@ -88,6 +91,6 @@ type Routine struct {
 ```go
 type Stats struct {
 	Count    int
-	Routines map[string]*Routine
+	Routines map[string]Routine
 }
 ```

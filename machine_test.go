@@ -19,10 +19,11 @@ func Test(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	for x := 0; x < 1000; x++ {
-		m.Go(func(ctx context.Context) error {
+		m.Go(func(routine machine.Routine) error {
 			i := x
 			t.Logf("id = %v current = %v\n", i, m.Current())
 			time.Sleep(200 * time.Millisecond)
+			t.Logf("duration = %v\n", routine.Duration())
 			return nil
 		})
 	}

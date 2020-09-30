@@ -16,27 +16,88 @@ var Cancel = errors.New("[machine] cancel")
 
 // Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
 type Machine struct {
-	cancel     func()
-	ctx        context.Context
-	errs       []error
-	routineMu  sync.RWMutex
-	routines   map[string]*Routine
-	max        int
-	closeOnce  sync.Once
-	debug      bool
-	workerChan chan *worker
+	cancel        func()
+	ctx           context.Context
+	errs          []error
+	routineMu     sync.RWMutex
+	routines      map[string]Routine
+	max           int
+	closeOnce     sync.Once
+	debug         bool
+	workerChan    chan *worker
+	publishMu     sync.RWMutex
+	publishChan   map[string]chan interface{}
+	subMu         sync.RWMutex
+	subscriptions map[string]map[string]chan interface{}
 }
 
 type worker struct {
-	fn func(ctx context.Context) error
+	fn   func(routine Routine) error
 	tags []string
 }
 
-type Routine struct {
-	ID       string
-	Tags 	 []string
-	Start    time.Time
-	Duration time.Duration
+type Routine interface {
+	Context() context.Context
+	ID() string
+	Tags() []string
+	Start() time.Time
+	Duration() time.Duration
+	Publish(channel string, obj interface{})
+	Subscribe(channel string) chan interface{}
+}
+
+type goRoutine struct {
+	machine *Machine
+	ctx     context.Context
+	id      string
+	tags    []string
+	start   time.Time
+}
+
+func (r *goRoutine) Context() context.Context {
+	return r.ctx
+}
+
+func (r *goRoutine) ID() string {
+	return r.id
+}
+
+func (r *goRoutine) Tags() []string {
+	return r.Tags()
+}
+
+func (r *goRoutine) Start() time.Time {
+	return r.start
+}
+
+func (r *goRoutine) Duration() time.Duration {
+	return time.Since(r.start)
+}
+
+func (g *goRoutine) Publish(channel string, obj interface{}) {
+	g.machine.publishMu.Lock()
+	defer g.machine.publishMu.Unlock()
+	if g.machine.publishChan == nil {
+		g.machine.publishChan = map[string]chan interface{}{}
+	}
+	if g.machine.publishChan[channel] == nil {
+		g.machine.publishChan[channel] = make(chan interface{})
+	}
+	g.machine.publishChan[channel] <- obj
+}
+
+func (g *goRoutine) Subscribe(channel string) chan interface{} {
+	g.machine.subMu.Lock()
+	defer g.machine.subMu.Unlock()
+	ch := make(chan interface{})
+	if g.machine.subscriptions == nil {
+		g.machine.subscriptions = map[string]map[string]chan interface{}{}
+	}
+	if g.machine.subscriptions[channel] == nil {
+		g.machine.subscriptions[channel] = map[string]chan interface{}{}
+	}
+	g.machine.subscriptions[channel][g.id] = ch
+	return ch
 }
 
 type Opts struct {
@@ -53,32 +114,42 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
-		cancel:     cancel,
-		ctx:        ctx,
-		errs:       nil,
-		routineMu:  sync.RWMutex{},
-		routines:   map[string]*Routine{},
-		max:        opts.MaxRoutines,
-		closeOnce:  sync.Once{},
-		debug:      false,
-		workerChan: make(chan *worker, opts.MaxRoutines),
+		cancel:        cancel,
+		ctx:           ctx,
+		errs:          nil,
+		routineMu:     sync.RWMutex{},
+		routines:      map[string]Routine{},
+		max:           opts.MaxRoutines,
+		closeOnce:     sync.Once{},
+		debug:         false,
+		workerChan:    make(chan *worker, opts.MaxRoutines),
+		publishMu:     sync.RWMutex{},
+		publishChan:   map[string]chan interface{}{},
+		subMu:         sync.RWMutex{},
+		subscriptions: map[string]map[string]chan interface{}{},
 	}
-	workerLisId := m.addRoutine("machine.worker.queue")
+	child1, cancel1 := context.WithCancel(m.ctx)
+	workerLisRoutine := m.addRoutine(child1, "machine.worker.queue")
+	m.routineMu.Lock()
+	m.routines[workerLisRoutine.ID()] = workerLisRoutine
+	m.routineMu.Unlock()
 	go func() {
-		defer m.closeRoutine(workerLisId)
-		child1, cancel1 := context.WithCancel(m.ctx)
+		defer m.closeRoutine(workerLisRoutine.ID())
 		defer cancel1()
 		for {
 			select {
 			case <-child1.Done():
 				return
 			case work := <-m.workerChan:
-				id := m.addRoutine(work.tags...)
+				child2, cancel2 := context.WithCancel(workerLisRoutine.Context())
+				workerRoutine := m.addRoutine(child2, work.tags...)
+				m.routineMu.Lock()
+				m.routines[workerRoutine.ID()] = workerRoutine
+				m.routineMu.Unlock()
 				go func() {
-					defer m.closeRoutine(id)
-					child2, cancel2 := context.WithCancel(child1)
+					defer m.closeRoutine(workerRoutine.ID())
 					defer cancel2()
-					if err := work.fn(child2); err != nil {
+					if err := work.fn(workerRoutine); err != nil {
 						if errors.Cause(err) == Cancel {
 							m.Cancel()
 						} else {
@@ -99,26 +170,25 @@ func (p *Machine) Current() int {
 	return len(p.routines)
 }
 
-func (p *Machine) addRoutine(tags ...string) string {
+func (p *Machine) addRoutine(ctx context.Context, tags ...string) Routine {
 	var x int
 	for x = len(p.routines); x >= p.max && p.ctx.Err() == nil; x = p.Current() {
 	}
 	id := uuid()
-	p.routineMu.Lock()
-	p.routines[id] = &Routine{
-		ID:       id,
-		Tags:     tags,
-		Start:    time.Now(),
+	return &goRoutine{
+		machine: p,
+		ctx:     ctx,
+		id:      id,
+		tags:    tags,
+		start:   time.Now(),
 	}
-	p.routineMu.Unlock()
-	return id
 }
 
 // Go calls the given function in a new goroutine.
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (p *Machine) Go(f func(ctx context.Context) error, tags ...string) {
+func (p *Machine) Go(f func(routine Routine) error, tags ...string) {
 	p.workerChan <- &worker{
 		fn:   f,
 		tags: tags,
@@ -153,16 +223,15 @@ func (p *Machine) Cancel() {
 
 type Stats struct {
 	Count    int
-	Routines map[string]*Routine
+	Routines map[string]Routine
 }
 
 func (m *Machine) Stats() Stats {
-	copied := map[string]*Routine{}
+	copied := map[string]Routine{}
 	m.routineMu.RLock()
 	defer m.routineMu.RUnlock()
 	for k, v := range m.routines {
 		if v != nil {
-			v.Duration = time.Since(v.Start)
 			copied[k] = v
 		}
 	}
