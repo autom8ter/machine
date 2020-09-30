@@ -24,15 +24,19 @@ type Machine struct {
 	max        int
 	closeOnce  sync.Once
 	debug      bool
-	workerChan chan func(ctx context.Context) error
+	workerChan chan *worker
+}
+
+type worker struct {
+	fn func(ctx context.Context) error
+	tags []string
 }
 
 type Routine struct {
 	ID       string
-	Metadata map[string]string
+	Tags 	 []string
 	Start    time.Time
 	Duration time.Duration
-	dataChan chan interface{}
 }
 
 type Opts struct {
@@ -57,9 +61,9 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		max:        opts.MaxRoutines,
 		closeOnce:  sync.Once{},
 		debug:      false,
-		workerChan: make(chan func(ctx context.Context) error, opts.MaxRoutines),
+		workerChan: make(chan *worker, opts.MaxRoutines),
 	}
-	workerLisId := m.addRoutine()
+	workerLisId := m.addRoutine("machine.worker.queue")
 	go func() {
 		defer m.closeRoutine(workerLisId)
 		child1, cancel1 := context.WithCancel(m.ctx)
@@ -69,12 +73,12 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 			case <-child1.Done():
 				return
 			case work := <-m.workerChan:
-				id := m.addRoutine()
+				id := m.addRoutine(work.tags...)
 				go func() {
 					defer m.closeRoutine(id)
 					child2, cancel2 := context.WithCancel(child1)
 					defer cancel2()
-					if err := work(child2); err != nil {
+					if err := work.fn(child2); err != nil {
 						if errors.Cause(err) == Cancel {
 							m.Cancel()
 						} else {
@@ -95,7 +99,7 @@ func (p *Machine) Current() int {
 	return len(p.routines)
 }
 
-func (p *Machine) addRoutine() string {
+func (p *Machine) addRoutine(tags ...string) string {
 	var x int
 	for x = len(p.routines); x >= p.max && p.ctx.Err() == nil; x = p.Current() {
 	}
@@ -103,9 +107,8 @@ func (p *Machine) addRoutine() string {
 	p.routineMu.Lock()
 	p.routines[id] = &Routine{
 		ID:       id,
-		Metadata: map[string]string{},
+		Tags:     tags,
 		Start:    time.Now(),
-		dataChan: make(chan interface{}),
 	}
 	p.routineMu.Unlock()
 	return id
@@ -115,8 +118,11 @@ func (p *Machine) addRoutine() string {
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (p *Machine) Go(f func(ctx context.Context) error) {
-	p.workerChan <- f
+func (p *Machine) Go(f func(ctx context.Context) error, tags ...string) {
+	p.workerChan <- &worker{
+		fn:   f,
+		tags: tags,
+	}
 }
 
 func (p *Machine) addErr(err error) {

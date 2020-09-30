@@ -38,12 +38,6 @@ func (p *Machine) Current() int
 ```
 Current returns current managed goroutine count
 
-#### func (*Machine) Finished
-
-```go
-func (p *Machine) Finished() bool
-```
-
 #### func (*Machine) Go
 
 ```go
