@@ -2,6 +2,7 @@ package machine_test
 
 import (
 	"context"
+	"fmt"
 	"github.com/autom8ter/machine"
 	"testing"
 	"time"
@@ -10,18 +11,25 @@ import (
 func Test(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	defer cancel()
-	workerPool := machine.New(ctx, 100)
-	for x := 0; x < 10000; x++ {
-		workerPool.Go(func(ctx context.Context) error {
+	m, err := machine.New(ctx, &machine.Opts{
+		MaxRoutines: 100,
+	})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	for x := 0; x < 1000; x++ {
+		m.Go(func(ctx context.Context) error {
+			i := x
+			fmt.Printf("index = %v current = %v\n", i, m.Current())
 			time.Sleep(200 * time.Millisecond)
 			return nil
 		})
 	}
-	if errs := workerPool.Wait(); len(errs) > 0 {
+	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Logf("workerPool error: %s", err)
 		}
 	}
-	t.Logf("after: %v", workerPool.Current())
+	t.Logf("after: %v", m.Current())
 
 }

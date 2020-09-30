@@ -1,12 +1,17 @@
 package graph
 
+type Metadata interface {
+	Get(key string) (interface{}, error)
+	Set(key string, val interface{}) error
+	Range(fn func(key string, val interface{}) error) error
+}
+
 
 type Node interface {
 	ID() uint64
 	Type() uint64
-	Get(key string) (interface{}, error)
-	Set(key string, val interface{}) error
-	Range(fn func(key string, val interface{}) error) error
+	Metadata
+	GetEdge() (Edge, error)
 }
 
 type Edge interface {
@@ -16,5 +21,6 @@ type Edge interface {
 }
 
 type Graph interface {
-	GetNode(typ, id uint64) Node
+	GetNode(typ, id uint64) (Node, error)
+
 }
