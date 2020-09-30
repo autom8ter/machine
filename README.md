@@ -9,26 +9,6 @@
 var Cancel = errors.New("[machine] cancel")
 ```
 
-#### type Cache
-
-```go
-type Cache interface {
-	Get(id string) (map[string]interface{}, error)
-	Set(id string, data map[string]interface{}) error
-	Range(fn func(key string, data map[string]interface{}) bool)
-	Sync() error
-	Del(id string) error
-	Close() error
-}
-```
-
-
-#### func  NewInMemStorage
-
-```go
-func NewInMemStorage() Cache
-```
-
 #### type Machine
 
 ```go
@@ -44,12 +24,6 @@ Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
 func New(ctx context.Context, opts *Opts) (*Machine, error)
 ```
 
-#### func (*Machine) Cache
-
-```go
-func (p *Machine) Cache() Cache
-```
-
 #### func (*Machine) Cancel
 
 ```go
@@ -62,6 +36,7 @@ Cancel cancels every functions context
 ```go
 func (p *Machine) Current() int
 ```
+Current returns current managed goroutine count
 
 #### func (*Machine) Finished
 
@@ -96,10 +71,20 @@ func (p *Machine) Wait() []error
 
 ```go
 type Opts struct {
-	MaxRoutines   int
-	Debug         bool
-	CacheProvider Cache
-	SyncInterval  time.Duration
+	MaxRoutines int
+	Debug       bool
+}
+```
+
+
+#### type Routine
+
+```go
+type Routine struct {
+	ID       string
+	Tags     []string
+	Start    time.Time
+	Duration time.Duration
 }
 ```
 
@@ -109,6 +94,6 @@ type Opts struct {
 ```go
 type Stats struct {
 	Count    int
-	Routines map[string][]string
+	Routines map[string]*Routine
 }
 ```

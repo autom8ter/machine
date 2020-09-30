@@ -2,7 +2,7 @@ package machine_test
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"github.com/autom8ter/machine"
 	"testing"
 	"time"
@@ -21,19 +21,15 @@ func Test(t *testing.T) {
 	for x := 0; x < 1000; x++ {
 		m.Go(func(ctx context.Context) error {
 			i := x
-			m.Cache().Set(fmt.Sprint(i), map[string]interface{}{
-				"index": fmt.Sprint(i),
-				"current": m.Current(),
-			})
+			t.Logf("id = %v current = %v\n", i, m.Current())
 			time.Sleep(200 * time.Millisecond)
 			return nil
 		})
 	}
-	m.Cache().Range(func(id string, data map[string]interface{}) bool {
-		t.Logf("id = %v data = %v\n", id, data)
-		return true
-	})
-	t.Logf("stats = %v\n", m.Stats())
+	time.Sleep(1 * time.Second)
+	stats := m.Stats()
+	bits, _ := json.MarshalIndent(&stats, "", "    ")
+	t.Logf("stats = %v\n", string(bits))
 	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Logf("workerPool error: %s", err)

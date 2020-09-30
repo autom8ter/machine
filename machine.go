@@ -4,10 +4,10 @@ package machine
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
 	"fmt"
 	"github.com/pkg/errors"
+	"log"
 	"sync"
 	"time"
 )
@@ -16,12 +16,11 @@ var Cancel = errors.New("[machine] cancel")
 
 // Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
 type Machine struct {
-	cache      Cache
 	cancel     func()
 	ctx        context.Context
 	errs       []error
 	routineMu  sync.RWMutex
-	routines   map[string][]string
+	routines   map[string]*Routine
 	max        int
 	closeOnce  sync.Once
 	debug      bool
@@ -33,11 +32,17 @@ type worker struct {
 	fn   func(ctx context.Context) error
 }
 
+type Routine struct {
+	ID       string
+	Tags     []string
+	Start    time.Time
+	Duration time.Duration
+	dataChan chan interface{}
+}
+
 type Opts struct {
-	MaxRoutines   int
-	Debug         bool
-	CacheProvider Cache
-	SyncInterval  time.Duration
+	MaxRoutines int
+	Debug       bool
 }
 
 func New(ctx context.Context, opts *Opts) (*Machine, error) {
@@ -47,20 +52,13 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	if opts.MaxRoutines <= 0 {
 		opts.MaxRoutines = 10000
 	}
-	if opts.SyncInterval <= 0 {
-		opts.SyncInterval = 5 * time.Minute
-	}
-	if opts.CacheProvider == nil {
-		opts.CacheProvider = NewInMemStorage()
-	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
-		cache:      opts.CacheProvider,
 		cancel:     cancel,
 		ctx:        ctx,
 		errs:       nil,
 		routineMu:  sync.RWMutex{},
-		routines:   map[string][]string{},
+		routines:   map[string]*Routine{},
 		max:        opts.MaxRoutines,
 		closeOnce:  sync.Once{},
 		debug:      false,
@@ -71,24 +69,12 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		defer m.closeRoutine(workerLisId)
 		child1, cancel1 := context.WithCancel(m.ctx)
 		defer cancel1()
-		gcTicker := time.NewTicker(opts.SyncInterval)
 		for {
 			select {
-			case <-gcTicker.C:
-				if err := m.cache.Sync(); err != nil {
-					m.errs = append(m.errs, err)
-				}
 			case <-child1.Done():
-				gcTicker.Stop()
-				if err := m.cache.Sync(); err != nil {
-					m.errs = append(m.errs, err)
-				}
-				if err := m.cache.Close(); err != nil {
-					m.errs = append(m.errs, err)
-				}
 				return
 			case work := <-m.workerChan:
-				id := m.addRoutine([]string{"worker"})
+				id := m.addRoutine(work.tags)
 				go func() {
 					defer m.closeRoutine(id)
 					child2, cancel2 := context.WithCancel(child1)
@@ -107,6 +93,7 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	return m, nil
 }
 
+// Current returns current managed goroutine count
 func (p *Machine) Current() int {
 	p.routineMu.Lock()
 	defer p.routineMu.Unlock()
@@ -117,9 +104,14 @@ func (p *Machine) addRoutine(tags []string) string {
 	var x int
 	for x = len(p.routines); x >= p.max && p.ctx.Err() == nil; x = p.Current() {
 	}
-	id := hash(x)
+	id := uuid()
 	p.routineMu.Lock()
-	p.routines[id] = tags
+	p.routines[id] = &Routine{
+		ID:       id,
+		Tags:     tags,
+		Start:    time.Now(),
+		dataChan: make(chan interface{}),
+	}
 	p.routineMu.Unlock()
 	return id
 }
@@ -137,10 +129,6 @@ func (p *Machine) Go(f func(ctx context.Context) error, tags ...string) {
 
 func (p *Machine) addErr(err error) {
 	p.errs = append(p.errs, err)
-}
-
-func (p *Machine) Cache() Cache {
-	return p.cache
 }
 
 func (p *Machine) closeRoutine(id string) {
@@ -171,15 +159,18 @@ func (p *Machine) Finished() bool {
 
 type Stats struct {
 	Count    int
-	Routines map[string][]string
+	Routines map[string]*Routine
 }
 
 func (m *Machine) Stats() Stats {
-	copied := map[string][]string{}
+	copied := map[string]*Routine{}
 	m.routineMu.RLock()
 	defer m.routineMu.RUnlock()
 	for k, v := range m.routines {
-		copied[k] = v
+		if v != nil {
+			v.Duration = time.Since(v.Start)
+			copied[k] = v
+		}
 	}
 	return Stats{
 		Routines: copied,
@@ -193,8 +184,13 @@ func (p *Machine) debugf(format string, a ...interface{}) {
 	}
 }
 
-func hash(this int) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(fmt.Sprintf("%v", this)))
-	return hex.EncodeToString(hasher.Sum(nil))
+func uuid() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		log.Fatal(err)
+	}
+	uuid := fmt.Sprintf("%x-%x-%x-%x-%x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+	return uuid
 }
