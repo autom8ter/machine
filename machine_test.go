@@ -13,6 +13,7 @@ func Test(t *testing.T) {
 	defer cancel()
 	m, err := machine.New(ctx, &machine.Opts{
 		MaxRoutines: 100,
+		Debug:       true,
 	})
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -25,6 +26,7 @@ func Test(t *testing.T) {
 			return nil
 		})
 	}
+	t.Logf("stats = %v\n", m.Stats())
 	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Logf("workerPool error: %s", err)
