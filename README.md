@@ -82,6 +82,7 @@ type Routine interface {
 	Duration() time.Duration
 	Publish(channel string, obj interface{})
 	Subscribe(channel string) chan interface{}
+	Subscriptions() []string
 }
 ```
 

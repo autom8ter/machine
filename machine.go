@@ -26,9 +26,14 @@ type Machine struct {
 	debug         bool
 	workerChan    chan *worker
 	publishMu     sync.RWMutex
-	publishChan   map[string]chan interface{}
+	publishChan   chan *object
 	subMu         sync.RWMutex
 	subscriptions map[string]map[string]chan interface{}
+}
+
+type object struct {
+	channel string
+	obj     interface{}
 }
 
 type worker struct {
@@ -44,14 +49,16 @@ type Routine interface {
 	Duration() time.Duration
 	Publish(channel string, obj interface{})
 	Subscribe(channel string) chan interface{}
+	Subscriptions() []string
 }
 
 type goRoutine struct {
-	machine *Machine
-	ctx     context.Context
-	id      string
-	tags    []string
-	start   time.Time
+	machine       *Machine
+	ctx           context.Context
+	id            string
+	tags          []string
+	start         time.Time
+	subscriptions []string
 }
 
 func (r *goRoutine) Context() context.Context {
@@ -78,18 +85,18 @@ func (g *goRoutine) Publish(channel string, obj interface{}) {
 	g.machine.publishMu.Lock()
 	defer g.machine.publishMu.Unlock()
 	if g.machine.publishChan == nil {
-		g.machine.publishChan = map[string]chan interface{}{}
+		g.machine.publishChan = make(chan *object, 1000)
 	}
-	if g.machine.publishChan[channel] == nil {
-		g.machine.publishChan[channel] = make(chan interface{})
+	g.machine.publishChan <- &object{
+		channel: channel,
+		obj:     obj,
 	}
-	g.machine.publishChan[channel] <- obj
 }
 
 func (g *goRoutine) Subscribe(channel string) chan interface{} {
 	g.machine.subMu.Lock()
 	defer g.machine.subMu.Unlock()
-	ch := make(chan interface{})
+	ch := make(chan interface{}, 1000)
 	if g.machine.subscriptions == nil {
 		g.machine.subscriptions = map[string]map[string]chan interface{}{}
 	}
@@ -98,6 +105,10 @@ func (g *goRoutine) Subscribe(channel string) chan interface{} {
 	}
 	g.machine.subscriptions[channel][g.id] = ch
 	return ch
+}
+
+func (g *goRoutine) Subscriptions() []string {
+	return g.subscriptions
 }
 
 type Opts struct {
@@ -124,10 +135,11 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		debug:         false,
 		workerChan:    make(chan *worker, opts.MaxRoutines),
 		publishMu:     sync.RWMutex{},
-		publishChan:   map[string]chan interface{}{},
+		publishChan:   make(chan *object, 1000),
 		subMu:         sync.RWMutex{},
 		subscriptions: map[string]map[string]chan interface{}{},
 	}
+
 	child1, cancel1 := context.WithCancel(m.ctx)
 	workerLisRoutine := m.addRoutine(child1, "machine.worker.queue")
 	m.routineMu.Lock()
@@ -140,6 +152,20 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 			select {
 			case <-child1.Done():
 				return
+			case obj := <-m.publishChan:
+				child2, cancel2 := context.WithCancel(workerLisRoutine.Context())
+				streamRoutine := m.addRoutine(child2, fmt.Sprintf("stream.%s", obj.channel))
+				m.routineMu.Lock()
+				m.routines[streamRoutine.ID()] = streamRoutine
+				m.routineMu.Unlock()
+				go func() {
+					defer m.closeRoutine(streamRoutine.ID())
+					defer cancel2()
+					channelSubscribers := m.subscriptions[obj.channel]
+					for _, input := range channelSubscribers {
+						input <- obj.obj
+					}
+				}()
 			case work := <-m.workerChan:
 				child2, cancel2 := context.WithCancel(workerLisRoutine.Context())
 				workerRoutine := m.addRoutine(child2, work.tags...)
@@ -200,9 +226,17 @@ func (p *Machine) addErr(err error) {
 }
 
 func (p *Machine) closeRoutine(id string) {
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
 	p.routineMu.Lock()
+	defer p.routineMu.Unlock()
+	routine := p.routines[id]
+	for _, sub := range routine.Subscriptions() {
+		if _, ok := p.subscriptions[sub]; ok {
+			delete(p.subscriptions[sub], id)
+		}
+	}
 	delete(p.routines, id)
-	p.routineMu.Unlock()
 }
 
 func (p *Machine) Wait() []error {
