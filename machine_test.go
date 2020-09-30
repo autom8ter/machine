@@ -18,6 +18,7 @@ func Test(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
+
 	for x := 0; x < 1000; x++ {
 		m.Go(func(routine machine.Routine) error {
 			i := x

@@ -25,7 +25,6 @@ type Machine struct {
 	closeOnce     sync.Once
 	debug         bool
 	workerChan    chan *worker
-	publishMu     sync.RWMutex
 	publishChan   chan *object
 	subMu         sync.RWMutex
 	subscriptions map[string]map[string]chan interface{}
@@ -41,14 +40,23 @@ type worker struct {
 	tags []string
 }
 
+// Routine is an interface representing a goroutine
 type Routine interface {
+	// Context returns the goroutines unique context that may be used for cancellation
 	Context() context.Context
+	// ID() is the goroutines unique id
 	ID() string
+	// Tags() are the tags associated with the goroutine
 	Tags() []string
+	// Start is when the goroutine started
 	Start() time.Time
+	// Duration is the duration since the goroutine started
 	Duration() time.Duration
+	// Publish publishes the object to the given channel
 	Publish(channel string, obj interface{})
+	// Subscribe subscribes to a channel & returns a go channel
 	Subscribe(channel string) chan interface{}
+	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
 }
 
@@ -82,8 +90,6 @@ func (r *goRoutine) Duration() time.Duration {
 }
 
 func (g *goRoutine) Publish(channel string, obj interface{}) {
-	g.machine.publishMu.Lock()
-	defer g.machine.publishMu.Unlock()
 	if g.machine.publishChan == nil {
 		g.machine.publishChan = make(chan *object, 1000)
 	}
@@ -104,6 +110,7 @@ func (g *goRoutine) Subscribe(channel string) chan interface{} {
 		g.machine.subscriptions[channel] = map[string]chan interface{}{}
 	}
 	g.machine.subscriptions[channel][g.id] = ch
+	g.subscriptions = append(g.subscriptions, channel)
 	return ch
 }
 
@@ -111,11 +118,13 @@ func (g *goRoutine) Subscriptions() []string {
 	return g.subscriptions
 }
 
+// Opts are options when creating a machine instance
 type Opts struct {
 	MaxRoutines int
 	Debug       bool
 }
 
+// New Creates a new machine instance
 func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	if opts == nil {
 		opts = &Opts{}
@@ -134,7 +143,6 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		closeOnce:     sync.Once{},
 		debug:         false,
 		workerChan:    make(chan *worker, opts.MaxRoutines),
-		publishMu:     sync.RWMutex{},
 		publishChan:   make(chan *object, 1000),
 		subMu:         sync.RWMutex{},
 		subscriptions: map[string]map[string]chan interface{}{},
@@ -161,6 +169,9 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 				go func() {
 					defer m.closeRoutine(streamRoutine.ID())
 					defer cancel2()
+					if m.subscriptions[obj.channel] == nil {
+						m.subscriptions[obj.channel] = map[string]chan interface{}{}
+					}
 					channelSubscribers := m.subscriptions[obj.channel]
 					for _, input := range channelSubscribers {
 						input <- obj.obj
