@@ -5,6 +5,7 @@ package machine
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -20,15 +21,13 @@ type Machine struct {
 	cancel        func()
 	ctx           context.Context
 	errs          []error
-	routineMu     sync.RWMutex
+	mu            sync.RWMutex
 	routines      map[string]Routine
 	max           int
 	closeOnce     sync.Once
 	debug         bool
-	workerChan    chan *worker
-	publishChan   chan *object
-	subMu         sync.RWMutex
 	subscriptions map[string]map[string]chan interface{}
+	subMu         sync.RWMutex
 }
 
 type object struct {
@@ -37,8 +36,8 @@ type object struct {
 }
 
 type worker struct {
-	fn   func(routine Routine) error
-	tags []string
+	fn      func(routine Routine) error
+	routine Routine
 }
 
 // Routine is an interface representing a goroutine
@@ -53,10 +52,10 @@ type Routine interface {
 	Start() time.Time
 	// Duration is the duration since the goroutine started
 	Duration() time.Duration
-	// Publish publishes the object to the given channel
-	Publish(channel string, obj interface{})
-	// Subscribe subscribes to a channel & returns a go channel
-	Subscribe(channel string) chan interface{}
+	// PublishTo starts a stream that may be published to from the routine. It listens on the returned channel.
+	PublishTo(channel string) chan interface{}
+	// SubscribeTo subscribes to a channel & returns a go channel
+	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
 	Done()
@@ -69,8 +68,8 @@ type goRoutine struct {
 	tags          []string
 	start         time.Time
 	subscriptions []string
-	doneOnce sync.Once
-	cancel func()
+	doneOnce      sync.Once
+	cancel        func()
 }
 
 func (r *goRoutine) Context() context.Context {
@@ -82,7 +81,7 @@ func (r *goRoutine) ID() string {
 }
 
 func (r *goRoutine) Tags() []string {
-	return r.Tags()
+	return r.tags
 }
 
 func (r *goRoutine) Start() time.Time {
@@ -93,23 +92,33 @@ func (r *goRoutine) Duration() time.Duration {
 	return time.Since(r.start)
 }
 
-func (g *goRoutine) Publish(channel string, obj interface{}) {
-	if g.machine.publishChan == nil {
-		g.machine.publishChan = make(chan *object, 1000)
-	}
-	g.machine.publishChan <- &object{
-		channel: channel,
-		obj:     obj,
-	}
+func (g *goRoutine) PublishTo(channel string) chan interface{} {
+	ch := make(chan interface{})
+	g.machine.Go(func(routine Routine) error {
+		for {
+			select {
+			case <-routine.Context().Done():
+				return nil
+			case obj := <-ch:
+				if g.machine.subscriptions[channel] == nil {
+					g.machine.subMu.Lock()
+					g.machine.subscriptions[channel] = map[string]chan interface{}{}
+					g.machine.subMu.Unlock()
+				}
+				channelSubscribers := g.machine.subscriptions[channel]
+				for _, input := range channelSubscribers {
+					input <- obj
+				}
+			}
+		}
+	}, fmt.Sprintf("stream-to-%s", channel))
+	return ch
 }
 
-func (g *goRoutine) Subscribe(channel string) chan interface{} {
+func (g *goRoutine) SubscribeTo(channel string) chan interface{} {
 	g.machine.subMu.Lock()
 	defer g.machine.subMu.Unlock()
-	ch := make(chan interface{}, 1000)
-	if g.machine.subscriptions == nil {
-		g.machine.subscriptions = map[string]map[string]chan interface{}{}
-	}
+	ch := make(chan interface{})
 	if g.machine.subscriptions[channel] == nil {
 		g.machine.subscriptions[channel] = map[string]chan interface{}{}
 	}
@@ -139,60 +148,24 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		opts.MaxRoutines = 10000
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	m := &Machine{
+	return &Machine{
 		cancel:        cancel,
 		ctx:           ctx,
 		errs:          nil,
-		routineMu:     sync.RWMutex{},
+		mu:            sync.RWMutex{},
 		routines:      map[string]Routine{},
 		max:           opts.MaxRoutines,
 		closeOnce:     sync.Once{},
 		debug:         false,
-		workerChan:    make(chan *worker, opts.MaxRoutines),
-		publishChan:   make(chan *object, 1000),
-		subMu:         sync.RWMutex{},
 		subscriptions: map[string]map[string]chan interface{}{},
-	}
-
-	{
-		workerLisRoutine := m.addRoutine("machine.worker.queue")
-		go func() {
-			defer workerLisRoutine.Done()
-			for {
-				select {
-				case <-workerLisRoutine.Context().Done():
-					return
-				case obj := <-m.publishChan:
-					if m.subscriptions[obj.channel] == nil {
-						m.subscriptions[obj.channel] = map[string]chan interface{}{}
-					}
-					channelSubscribers := m.subscriptions[obj.channel]
-					for _, input := range channelSubscribers {
-						input <- obj.obj
-					}
-				case work := <-m.workerChan:
-					workerRoutine := m.addRoutine(work.tags...)
-					go func() {
-						defer workerRoutine.Done()
-						if err := work.fn(workerRoutine); err != nil {
-							if errors.Unwrap(err) == Cancel {
-								m.Cancel()
-							} else {
-								m.addErr(err)
-							}
-						}
-					}()
-				}
-			}
-		}()
-	}
-	return m, nil
+		subMu:         sync.RWMutex{},
+	}, nil
 }
 
 // Current returns current managed goroutine count
 func (p *Machine) Current() int {
-	p.routineMu.Lock()
-	defer p.routineMu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return len(p.routines)
 }
 
@@ -201,22 +174,23 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 	var x int
 	for x = m.Current(); x >= m.max; x = m.Current() {
 		if m.ctx.Err() != nil {
+			cancel()
 			return nil
 		}
 	}
 	id := uuid()
 	routine := &goRoutine{
-		machine: m,
-		ctx:     child,
-		id:      id,
-		tags:    tags,
-		start:   time.Now(),
+		machine:  m,
+		ctx:      child,
+		id:       id,
+		tags:     tags,
+		start:    time.Now(),
 		doneOnce: sync.Once{},
-		cancel: cancel,
+		cancel:   cancel,
 	}
-	m.routineMu.Lock()
+	m.mu.Lock()
 	m.routines[id] = routine
-	m.routineMu.Unlock()
+	m.mu.Unlock()
 	return routine
 }
 
@@ -224,11 +198,18 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (p *Machine) Go(f func(routine Routine) error, tags ...string) {
-	p.workerChan <- &worker{
-		fn:   f,
-		tags: tags,
-	}
+func (m *Machine) Go(fn func(routine Routine) error, tags ...string) {
+	routine := m.addRoutine(tags...)
+	go func() {
+		defer routine.Done()
+		if err := fn(routine); err != nil {
+			if errors.Unwrap(err) == Cancel {
+				m.Cancel()
+			} else {
+				m.addErr(err)
+			}
+		}
+	}()
 }
 
 func (p *Machine) addErr(err error) {
@@ -238,10 +219,10 @@ func (p *Machine) addErr(err error) {
 func (g *goRoutine) Done() {
 	g.doneOnce.Do(func() {
 		g.cancel()
+		g.machine.mu.Lock()
+		defer g.machine.mu.Unlock()
 		g.machine.subMu.Lock()
 		defer g.machine.subMu.Unlock()
-		g.machine.routineMu.Lock()
-		defer g.machine.routineMu.Unlock()
 		for _, sub := range g.subscriptions {
 			if _, ok := g.machine.subscriptions[sub]; ok {
 				delete(g.machine.subscriptions[sub], g.id)
@@ -253,11 +234,9 @@ func (g *goRoutine) Done() {
 
 // Wait waites for all goroutines to exit
 func (p *Machine) Wait() []error {
-	for !(p.Current() != 0) {
+	for p.Current() != 0 {
 	}
 	p.Cancel()
-	for !(p.Current() != 0) {
-	}
 	return p.errs
 }
 
@@ -272,24 +251,37 @@ func (p *Machine) Cancel() {
 
 // Stats holds information about goroutines
 type Stats struct {
-	Count    int
-	Routines map[string]Routine
+	OpenRoutines      map[string][]string
+	OpenSubscriptions map[string][]string
 }
 
 // Stats returns Goroutine information
 func (m *Machine) Stats() Stats {
-	copied := map[string]Routine{}
-	m.routineMu.RLock()
-	defer m.routineMu.RUnlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	m.subMu.RLock()
+	defer m.subMu.RUnlock()
+	copied := map[string][]string{}
 	for k, v := range m.routines {
 		if v != nil {
-			copied[k] = v
+			copied[k] = v.Tags()
+		}
+	}
+	copiedSubs := map[string][]string{}
+	for channel, subscribers := range m.subscriptions {
+		for id, _ := range subscribers {
+			copiedSubs[channel] = append(copiedSubs[channel], id)
 		}
 	}
 	return Stats{
-		Routines: copied,
-		Count:    len(copied),
+		OpenRoutines:      copied,
+		OpenSubscriptions: copiedSubs,
 	}
+}
+
+func (s Stats) String() string {
+	bits, _ := json.MarshalIndent(&s, "", "    ")
+	return fmt.Sprintf("%s", string(bits))
 }
 
 func (p *Machine) debugf(format string, a ...interface{}) {

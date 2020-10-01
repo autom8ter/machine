@@ -2,7 +2,6 @@ package machine_test
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/autom8ter/machine"
 	"testing"
 	"time"
@@ -27,16 +26,11 @@ func Test(t *testing.T) {
 	}
 	time.Sleep(1 * time.Second)
 	stats := m.Stats()
-	bits, _ := json.MarshalIndent(&stats, "", "    ")
-	t.Logf("stats = %v\n", string(bits))
+	t.Logf("stats = %s\n", stats)
 	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Logf("workerPool error: %s", err)
 		}
-	}
-	select {
-	case <-ctx.Done():
-		 break
 	}
 	if m.Current() != 0 {
 		t.Fatalf("expected current to be zero")
@@ -56,30 +50,35 @@ func TestPubSub(t *testing.T) {
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine machine.Routine) error {
-		channel := routine.Subscribe(channelName)
+		channel := routine.SubscribeTo(channelName)
 		for {
 			select {
 			case <-routine.Context().Done():
+				close(channel)
 				return nil
 			case msg := <-channel:
 				seen = true
-				t.Logf("subscription msg received! channel = %v msg = %v\n", channelName, msg)
+				t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
 			}
 		}
-	})
-	published := "hello there"
+	}, "subscribe")
 	m.Go(func(routine machine.Routine) error {
-		ticker := time.NewTicker(1 *time.Second)
+		channel := routine.PublishTo(channelName)
+		tick := time.NewTicker(1 * time.Second)
 		for {
 			select {
 			case <-routine.Context().Done():
+				tick.Stop()
+				close(channel)
 				return nil
-			case <-ticker.C:
-				t.Logf("publishing message to channel = %v msg = %v\n", channelName, published)
-				routine.Publish(channelName, published)
+			case <-tick.C:
+				msg := "hey there bud!"
+				t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
+				channel <- msg
+				time.Sleep(1 * time.Second)
 			}
 		}
-	})
+	}, "publish")
 	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
 			t.Fatalf(err.Error())

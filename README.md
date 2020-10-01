@@ -43,7 +43,7 @@ Current returns current managed goroutine count
 #### func (*Machine) Go
 
 ```go
-func (p *Machine) Go(f func(routine Routine) error, tags ...string)
+func (m *Machine) Go(fn func(routine Routine) error, tags ...string)
 ```
 Go calls the given function in a new goroutine.
 
@@ -92,12 +92,13 @@ type Routine interface {
 	Start() time.Time
 	// Duration is the duration since the goroutine started
 	Duration() time.Duration
-	// Publish publishes the object to the given channel
-	Publish(channel string, obj interface{})
-	// Subscribe subscribes to a channel & returns a go channel
-	Subscribe(channel string) chan interface{}
+	// PublishTo starts a stream that may be published to from the routine. It listens on the returned channel.
+	PublishTo(channel string) chan interface{}
+	// SubscribeTo subscribes to a channel & returns a go channel
+	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
+	Done()
 }
 ```
 
@@ -107,9 +108,15 @@ Routine is an interface representing a goroutine
 
 ```go
 type Stats struct {
-	Count    int
-	Routines map[string]Routine
+	OpenRoutines      map[string][]string
+	OpenSubscriptions map[string][]string
 }
 ```
 
 Stats holds information about goroutines
+
+#### func (Stats) String
+
+```go
+func (s Stats) String() string
+```
