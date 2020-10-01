@@ -34,6 +34,10 @@ func Test(t *testing.T) {
 			t.Logf("workerPool error: %s", err)
 		}
 	}
+	select {
+	case <-ctx.Done():
+		 break
+	}
 	if m.Current() != 0 {
 		t.Fatalf("expected current to be zero")
 	}
