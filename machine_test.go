@@ -10,10 +10,7 @@ import (
 func Test(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	defer cancel()
-	m, err := machine.New(ctx, &machine.Opts{
-		MaxRoutines: 100,
-		Debug:       true,
-	})
+	m, err := machine.New(ctx, machine.WithMaxRoutines(100))
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -40,10 +37,7 @@ func Test(t *testing.T) {
 func TestPubSub(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
 	defer cancel()
-	m, err := machine.New(ctx, &machine.Opts{
-		MaxRoutines: 100,
-		Debug:       true,
-	})
+	m, err := machine.New(ctx, machine.WithMaxRoutines(100))
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

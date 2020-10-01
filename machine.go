@@ -42,34 +42,25 @@ type Machine struct {
 	subMu         sync.RWMutex
 }
 
-// Opts are options when creating a machine instance
-type Opts struct {
-	// MaxRoutines throttles goroutines at the given count
-	MaxRoutines int
-	// Debug enables debug logs
-	Debug            bool
-	PubChannelLength int
-	SubChannelLength int
-}
-
 // New Creates a new machine instance with the given root context & options
-func New(ctx context.Context, opts *Opts) (*Machine, error) {
-	if opts == nil {
-		opts = &Opts{}
+func New(ctx context.Context, options ...Opt) (*Machine, error) {
+	opts := &option{}
+	for _, o := range options {
+		o(opts)
 	}
-	if opts.MaxRoutines <= 0 {
-		opts.MaxRoutines = 10000
+	if opts.maxRoutines <= 0 {
+		opts.maxRoutines = 10000
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Machine{
-		subChanLength: opts.SubChannelLength,
-		pubChanLength: opts.PubChannelLength,
+		subChanLength: opts.subChannelLength,
+		pubChanLength: opts.pubChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
 		errs:          nil,
 		mu:            sync.RWMutex{},
 		routines:      map[string]Routine{},
-		max:           opts.MaxRoutines,
+		max:           opts.maxRoutines,
 		closeOnce:     sync.Once{},
 		debug:         false,
 		subscriptions: map[string]map[string]chan interface{}{},

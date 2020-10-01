@@ -33,7 +33,7 @@ with extra bells & whistles:
 #### func  New
 
 ```go
-func New(ctx context.Context, opts *Opts) (*Machine, error)
+func New(ctx context.Context, options ...Opt) (*Machine, error)
 ```
 New Creates a new machine instance with the given root context & options
 
@@ -76,20 +76,44 @@ func (p *Machine) Wait() []error
 ```
 Wait waites for all goroutines to exit
 
-#### type Opts
+#### type Opt
 
 ```go
-type Opts struct {
-	// MaxRoutines throttles goroutines at the given count
-	MaxRoutines int
-	// Debug enables debug logs
-	Debug            bool
-	PubChannelLength int
-	SubChannelLength int
-}
+type Opt func(o *option)
 ```
 
-Opts are options when creating a machine instance
+Opt is a single option when creating a machine instance with New
+
+#### func  WithDebug
+
+```go
+func WithDebug(debug bool) Opt
+```
+WithDebug enables debug mode
+
+#### func  WithMaxRoutines
+
+```go
+func WithMaxRoutines(max int) Opt
+```
+WithMaxRoutines throttles goroutines at the input number. It will panic if <=
+zero.
+
+#### func  WithPublishChannelBuffer
+
+```go
+func WithPublishChannelBuffer(length int) Opt
+```
+WithPublishChannelBuffer sets the buffer length of the channel returned from a
+goroutine publishTo
+
+#### func  WithSubscribeChannelBuffer
+
+```go
+func WithSubscribeChannelBuffer(length int) Opt
+```
+WithSubscribeChannelBuffer sets the buffer length of the channel returned from a
+Routine subscribeTo
 
 #### type Routine
 
