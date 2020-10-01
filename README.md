@@ -18,16 +18,24 @@ type Machine struct {
 ```
 
 Machine is a runtime for managed goroutines. It is inspired by errgroup.Group
-with extra bells & whistles: - throttled goroutines - cancellable goroutines -
-publish/subscribe to channels for passing messages between goroutines - tagging
-goroutines for debugging(see Stats)
+with extra bells & whistles:
+
+- throttled goroutines
+
+- self-cancellable goroutines with context
+
+- global-cancellable goroutines with context (see Cancel)
+
+- tagging goroutines for debugging(see Stats)
+
+- publish/subscribe to channels for passing messages between goroutines
 
 #### func  New
 
 ```go
 func New(ctx context.Context, opts *Opts) (*Machine, error)
 ```
-New Creates a new machine instance
+New Creates a new machine instance with the given root context & options
 
 #### func (*Machine) Cancel
 
@@ -59,7 +67,7 @@ Wait.
 ```go
 func (m *Machine) Stats() Stats
 ```
-Stats returns Goroutine information
+Stats returns Goroutine information from the machine
 
 #### func (*Machine) Wait
 
@@ -103,6 +111,8 @@ type Routine interface {
 	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
+	// AddedAt returns the goroutine count before the goroutine was added
+	AddedAt() int
 	//Done cancels the context of the current goroutine & kills any of it's subscriptions
 	Done()
 }
@@ -118,6 +128,7 @@ type RoutineStats struct {
 	Start         time.Time     `json:"start"`
 	Duration      time.Duration `json:"duration"`
 	Tags          []string      `json:"tags"`
+	AddedAt       int           `json:"addedAt"`
 	Subscriptions []string      `json:"subscriptions"`
 }
 ```
@@ -140,3 +151,4 @@ Stats holds information about goroutines
 ```go
 func (s Stats) String() string
 ```
+String prints a pretty json string of the stats

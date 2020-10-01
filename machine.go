@@ -4,11 +4,8 @@ package machine
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 )
@@ -18,10 +15,17 @@ var Cancel = errors.New("[machine] cancel")
 
 /*
 Machine is a runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+
 - throttled goroutines
-- cancellable goroutines
-- publish/subscribe to channels for passing messages between goroutines
+
+- self-cancellable goroutines with context
+
+- global-cancellable goroutines with context (see Cancel)
+
 - tagging goroutines for debugging(see Stats)
+
+- publish/subscribe to channels for passing messages between goroutines
+
 */
 type Machine struct {
 	subChanLength int
@@ -38,98 +42,6 @@ type Machine struct {
 	subMu         sync.RWMutex
 }
 
-// Routine is an interface representing a goroutine
-type Routine interface {
-	// Context returns the goroutines unique context that may be used for cancellation
-	Context() context.Context
-	// ID() is the goroutines unique id
-	ID() string
-	// Tags() are the tags associated with the goroutine
-	Tags() []string
-	// Start is when the goroutine started
-	Start() time.Time
-	// Duration is the duration since the goroutine started
-	Duration() time.Duration
-	// PublishTo starts a stream that may be published to from the routine. It listens on the returned channel.
-	PublishTo(channel string) chan interface{}
-	// SubscribeTo subscribes to a channel & returns a go channel
-	SubscribeTo(channel string) chan interface{}
-	// Subscriptions returns the channels that this goroutine is subscribed to
-	Subscriptions() []string
-	//Done cancels the context of the current goroutine & kills any of it's subscriptions
-	Done()
-}
-
-type goRoutine struct {
-	machine       *Machine
-	ctx           context.Context
-	id            string
-	tags          []string
-	start         time.Time
-	subscriptions []string
-	doneOnce      sync.Once
-	cancel        func()
-}
-
-func (r *goRoutine) Context() context.Context {
-	return r.ctx
-}
-
-func (r *goRoutine) ID() string {
-	return r.id
-}
-
-func (r *goRoutine) Tags() []string {
-	return r.tags
-}
-
-func (r *goRoutine) Start() time.Time {
-	return r.start
-}
-
-func (r *goRoutine) Duration() time.Duration {
-	return time.Since(r.start)
-}
-
-func (g *goRoutine) PublishTo(channel string) chan interface{} {
-	ch := make(chan interface{}, g.machine.pubChanLength)
-	g.machine.Go(func(routine Routine) error {
-		for {
-			select {
-			case <-routine.Context().Done():
-				return nil
-			case obj := <-ch:
-				if g.machine.subscriptions[channel] == nil {
-					g.machine.subMu.Lock()
-					g.machine.subscriptions[channel] = map[string]chan interface{}{}
-					g.machine.subMu.Unlock()
-				}
-				channelSubscribers := g.machine.subscriptions[channel]
-				for _, input := range channelSubscribers {
-					input <- obj
-				}
-			}
-		}
-	}, fmt.Sprintf("stream-to-%s", channel))
-	return ch
-}
-
-func (g *goRoutine) SubscribeTo(channel string) chan interface{} {
-	g.machine.subMu.Lock()
-	defer g.machine.subMu.Unlock()
-	ch := make(chan interface{}, g.machine.subChanLength)
-	if g.machine.subscriptions[channel] == nil {
-		g.machine.subscriptions[channel] = map[string]chan interface{}{}
-	}
-	g.machine.subscriptions[channel][g.id] = ch
-	g.subscriptions = append(g.subscriptions, channel)
-	return ch
-}
-
-func (g *goRoutine) Subscriptions() []string {
-	return g.subscriptions
-}
-
 // Opts are options when creating a machine instance
 type Opts struct {
 	// MaxRoutines throttles goroutines at the given count
@@ -140,7 +52,7 @@ type Opts struct {
 	SubChannelLength int
 }
 
-// New Creates a new machine instance
+// New Creates a new machine instance with the given root context & options
 func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	if opts == nil {
 		opts = &Opts{}
@@ -184,6 +96,7 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 	id := uuid()
 	routine := &goRoutine{
 		machine:  m,
+		addedAt:  x,
 		ctx:      child,
 		id:       id,
 		tags:     tags,
@@ -219,22 +132,6 @@ func (p *Machine) addErr(err error) {
 	p.errs = append(p.errs, err)
 }
 
-func (g *goRoutine) Done() {
-	g.doneOnce.Do(func() {
-		g.cancel()
-		g.machine.mu.Lock()
-		defer g.machine.mu.Unlock()
-		g.machine.subMu.Lock()
-		defer g.machine.subMu.Unlock()
-		for _, sub := range g.subscriptions {
-			if _, ok := g.machine.subscriptions[sub]; ok {
-				delete(g.machine.subscriptions[sub], g.id)
-			}
-		}
-		delete(g.machine.routines, g.id)
-	})
-}
-
 // Wait waites for all goroutines to exit
 func (p *Machine) Wait() []error {
 	for p.Current() != 0 {
@@ -252,22 +149,7 @@ func (p *Machine) Cancel() {
 	})
 }
 
-// Stats holds information about goroutines
-type Stats struct {
-	Count    int                     `json:"count"`
-	Routines map[string]RoutineStats `json:"routines"`
-}
-
-// RoutineStats holds information about a single goroutine
-type RoutineStats struct {
-	ID            string        `json:"id"`
-	Start         time.Time     `json:"start"`
-	Duration      time.Duration `json:"duration"`
-	Tags          []string      `json:"tags"`
-	Subscriptions []string      `json:"subscriptions"`
-}
-
-// Stats returns Goroutine information
+// Stats returns Goroutine information from the machine
 func (m *Machine) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -291,24 +173,8 @@ func (m *Machine) Stats() Stats {
 	}
 }
 
-func (s Stats) String() string {
-	bits, _ := json.MarshalIndent(&s, "", "    ")
-	return fmt.Sprintf("%s", string(bits))
-}
-
 func (p *Machine) debugf(format string, a ...interface{}) {
 	if p.debug {
 		fmt.Printf(format, a...)
 	}
-}
-
-func uuid() string {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		log.Fatal(err)
-	}
-	uuid := fmt.Sprintf("%x-%x-%x-%x-%x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-	return uuid
 }
