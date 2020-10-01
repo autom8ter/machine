@@ -16,8 +16,16 @@ import (
 // if a goroutine returns this error, every goroutines context will be cancelled
 var Cancel = errors.New("[machine] cancel")
 
-// Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
+/*
+Machine is a runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+- throttled goroutines
+- cancellable goroutines
+- publish/subscribe to channels for passing messages between goroutines
+- tagging goroutines for debugging(see Stats)
+*/
 type Machine struct {
+	subChanLength int
+	pubChanLength int
 	cancel        func()
 	ctx           context.Context
 	errs          []error
@@ -28,16 +36,6 @@ type Machine struct {
 	debug         bool
 	subscriptions map[string]map[string]chan interface{}
 	subMu         sync.RWMutex
-}
-
-type object struct {
-	channel string
-	obj     interface{}
-}
-
-type worker struct {
-	fn      func(routine Routine) error
-	routine Routine
 }
 
 // Routine is an interface representing a goroutine
@@ -58,6 +56,7 @@ type Routine interface {
 	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
+	//Done cancels the context of the current goroutine & kills any of it's subscriptions
 	Done()
 }
 
@@ -93,7 +92,7 @@ func (r *goRoutine) Duration() time.Duration {
 }
 
 func (g *goRoutine) PublishTo(channel string) chan interface{} {
-	ch := make(chan interface{})
+	ch := make(chan interface{}, g.machine.pubChanLength)
 	g.machine.Go(func(routine Routine) error {
 		for {
 			select {
@@ -118,7 +117,7 @@ func (g *goRoutine) PublishTo(channel string) chan interface{} {
 func (g *goRoutine) SubscribeTo(channel string) chan interface{} {
 	g.machine.subMu.Lock()
 	defer g.machine.subMu.Unlock()
-	ch := make(chan interface{})
+	ch := make(chan interface{}, g.machine.subChanLength)
 	if g.machine.subscriptions[channel] == nil {
 		g.machine.subscriptions[channel] = map[string]chan interface{}{}
 	}
@@ -136,7 +135,9 @@ type Opts struct {
 	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
 	// Debug enables debug logs
-	Debug bool
+	Debug            bool
+	PubChannelLength int
+	SubChannelLength int
 }
 
 // New Creates a new machine instance
@@ -149,6 +150,8 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Machine{
+		subChanLength: opts.SubChannelLength,
+		pubChanLength: opts.PubChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
 		errs:          nil,
@@ -251,8 +254,17 @@ func (p *Machine) Cancel() {
 
 // Stats holds information about goroutines
 type Stats struct {
-	OpenRoutines      map[string][]string
-	OpenSubscriptions map[string][]string
+	Count    int                     `json:"count"`
+	Routines map[string]RoutineStats `json:"routines"`
+}
+
+// RoutineStats holds information about a single goroutine
+type RoutineStats struct {
+	ID            string        `json:"id"`
+	Start         time.Time     `json:"start"`
+	Duration      time.Duration `json:"duration"`
+	Tags          []string      `json:"tags"`
+	Subscriptions []string      `json:"subscriptions"`
 }
 
 // Stats returns Goroutine information
@@ -261,21 +273,21 @@ func (m *Machine) Stats() Stats {
 	defer m.mu.RUnlock()
 	m.subMu.RLock()
 	defer m.subMu.RUnlock()
-	copied := map[string][]string{}
+	copied := map[string]RoutineStats{}
 	for k, v := range m.routines {
 		if v != nil {
-			copied[k] = v.Tags()
-		}
-	}
-	copiedSubs := map[string][]string{}
-	for channel, subscribers := range m.subscriptions {
-		for id, _ := range subscribers {
-			copiedSubs[channel] = append(copiedSubs[channel], id)
+			copied[k] = RoutineStats{
+				ID:            v.ID(),
+				Start:         v.Start(),
+				Duration:      v.Duration(),
+				Tags:          v.Tags(),
+				Subscriptions: v.Subscriptions(),
+			}
 		}
 	}
 	return Stats{
-		OpenRoutines:      copied,
-		OpenSubscriptions: copiedSubs,
+		Count:    len(copied),
+		Routines: copied,
 	}
 }
 

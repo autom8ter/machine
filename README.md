@@ -17,7 +17,10 @@ type Machine struct {
 }
 ```
 
-Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
+Machine is a runtime for managed goroutines. It is inspired by errgroup.Group
+with extra bells & whistles: - throttled goroutines - cancellable goroutines -
+publish/subscribe to channels for passing messages between goroutines - tagging
+goroutines for debugging(see Stats)
 
 #### func  New
 
@@ -72,7 +75,9 @@ type Opts struct {
 	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
 	// Debug enables debug logs
-	Debug bool
+	Debug            bool
+	PubChannelLength int
+	SubChannelLength int
 }
 ```
 
@@ -98,18 +103,33 @@ type Routine interface {
 	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
+	//Done cancels the context of the current goroutine & kills any of it's subscriptions
 	Done()
 }
 ```
 
 Routine is an interface representing a goroutine
 
+#### type RoutineStats
+
+```go
+type RoutineStats struct {
+	ID            string        `json:"id"`
+	Start         time.Time     `json:"start"`
+	Duration      time.Duration `json:"duration"`
+	Tags          []string      `json:"tags"`
+	Subscriptions []string      `json:"subscriptions"`
+}
+```
+
+RoutineStats holds information about a single goroutine
+
 #### type Stats
 
 ```go
 type Stats struct {
-	OpenRoutines      map[string][]string
-	OpenSubscriptions map[string][]string
+	Count    int                     `json:"count"`
+	Routines map[string]RoutineStats `json:"routines"`
 }
 ```
 
