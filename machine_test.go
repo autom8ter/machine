@@ -21,10 +21,7 @@ func Test(t *testing.T) {
 
 	for x := 0; x < 1000; x++ {
 		m.Go(func(routine machine.Routine) error {
-			i := x
-			t.Logf("id = %v current = %v\n", i, m.Current())
 			time.Sleep(200 * time.Millisecond)
-			t.Logf("duration = %v\n", routine.Duration())
 			return nil
 		})
 	}
@@ -37,6 +34,54 @@ func Test(t *testing.T) {
 			t.Logf("workerPool error: %s", err)
 		}
 	}
-	t.Logf("after: %v", m.Current())
+	if m.Current() != 0 {
+		t.Fatalf("expected current to be zero")
+	}
+}
 
+func TestPubSub(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
+	defer cancel()
+	m, err := machine.New(ctx, &machine.Opts{
+		MaxRoutines: 100,
+		Debug:       true,
+	})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	channelName := "acme.com"
+	var seen = false
+	m.Go(func(routine machine.Routine) error {
+		channel := routine.Subscribe(channelName)
+		for {
+			select {
+			case <-routine.Context().Done():
+				return nil
+			case msg := <-channel:
+				seen = true
+				t.Logf("subscription msg received! channel = %v msg = %v\n", channelName, msg)
+			}
+		}
+	})
+	published := "hello there"
+	m.Go(func(routine machine.Routine) error {
+		ticker := time.NewTicker(1 *time.Second)
+		for {
+			select {
+			case <-routine.Context().Done():
+				return nil
+			case <-ticker.C:
+				t.Logf("publishing message to channel = %v msg = %v\n", channelName, published)
+				routine.Publish(channelName, published)
+			}
+		}
+	})
+	if errs := m.Wait(); len(errs) > 0 {
+		for _, err := range errs {
+			t.Fatalf(err.Error())
+		}
+	}
+	if !seen {
+		t.Fatal("expected to have received a subscription msg")
+	}
 }

@@ -59,6 +59,7 @@ type Routine interface {
 	Subscribe(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
+	Done()
 }
 
 type goRoutine struct {
@@ -68,6 +69,8 @@ type goRoutine struct {
 	tags          []string
 	start         time.Time
 	subscriptions []string
+	doneOnce sync.Once
+	cancel func()
 }
 
 func (r *goRoutine) Context() context.Context {
@@ -124,7 +127,7 @@ type Opts struct {
 	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
 	// Debug enables debug logs
-	Debug       bool
+	Debug bool
 }
 
 // New Creates a new machine instance
@@ -151,27 +154,15 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 		subscriptions: map[string]map[string]chan interface{}{},
 	}
 
-	child1, cancel1 := context.WithCancel(m.ctx)
-	workerLisRoutine := m.addRoutine(child1, "machine.worker.queue")
-	m.routineMu.Lock()
-	m.routines[workerLisRoutine.ID()] = workerLisRoutine
-	m.routineMu.Unlock()
-	go func() {
-		defer m.closeRoutine(workerLisRoutine.ID())
-		defer cancel1()
-		for {
-			select {
-			case <-child1.Done():
-				return
-			case obj := <-m.publishChan:
-				child2, cancel2 := context.WithCancel(workerLisRoutine.Context())
-				streamRoutine := m.addRoutine(child2, fmt.Sprintf("stream.%s", obj.channel))
-				m.routineMu.Lock()
-				m.routines[streamRoutine.ID()] = streamRoutine
-				m.routineMu.Unlock()
-				go func() {
-					defer m.closeRoutine(streamRoutine.ID())
-					defer cancel2()
+	{
+		workerLisRoutine := m.addRoutine("machine.worker.queue")
+		go func() {
+			defer workerLisRoutine.Done()
+			for {
+				select {
+				case <-workerLisRoutine.Context().Done():
+					return
+				case obj := <-m.publishChan:
 					if m.subscriptions[obj.channel] == nil {
 						m.subscriptions[obj.channel] = map[string]chan interface{}{}
 					}
@@ -179,27 +170,22 @@ func New(ctx context.Context, opts *Opts) (*Machine, error) {
 					for _, input := range channelSubscribers {
 						input <- obj.obj
 					}
-				}()
-			case work := <-m.workerChan:
-				child2, cancel2 := context.WithCancel(workerLisRoutine.Context())
-				workerRoutine := m.addRoutine(child2, work.tags...)
-				m.routineMu.Lock()
-				m.routines[workerRoutine.ID()] = workerRoutine
-				m.routineMu.Unlock()
-				go func() {
-					defer m.closeRoutine(workerRoutine.ID())
-					defer cancel2()
-					if err := work.fn(workerRoutine); err != nil {
-						if errors.Unwrap(err) == Cancel {
-							m.Cancel()
-						} else {
-							m.addErr(err)
+				case work := <-m.workerChan:
+					workerRoutine := m.addRoutine(work.tags...)
+					go func() {
+						defer workerRoutine.Done()
+						if err := work.fn(workerRoutine); err != nil {
+							if errors.Unwrap(err) == Cancel {
+								m.Cancel()
+							} else {
+								m.addErr(err)
+							}
 						}
-					}
-				}()
+					}()
+				}
 			}
-		}
-	}()
+		}()
+	}
 	return m, nil
 }
 
@@ -210,18 +196,28 @@ func (p *Machine) Current() int {
 	return len(p.routines)
 }
 
-func (p *Machine) addRoutine(ctx context.Context, tags ...string) Routine {
+func (m *Machine) addRoutine(tags ...string) Routine {
+	child, cancel := context.WithCancel(m.ctx)
 	var x int
-	for x = len(p.routines); x >= p.max && p.ctx.Err() == nil; x = p.Current() {
+	for x = m.Current(); x >= m.max; x = m.Current() {
+		if m.ctx.Err() != nil {
+			return nil
+		}
 	}
 	id := uuid()
-	return &goRoutine{
-		machine: p,
-		ctx:     ctx,
+	routine := &goRoutine{
+		machine: m,
+		ctx:     child,
 		id:      id,
 		tags:    tags,
 		start:   time.Now(),
+		doneOnce: sync.Once{},
+		cancel: cancel,
 	}
+	m.routineMu.Lock()
+	m.routines[id] = routine
+	m.routineMu.Unlock()
+	return routine
 }
 
 // Go calls the given function in a new goroutine.
@@ -239,25 +235,29 @@ func (p *Machine) addErr(err error) {
 	p.errs = append(p.errs, err)
 }
 
-func (p *Machine) closeRoutine(id string) {
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
-	p.routineMu.Lock()
-	defer p.routineMu.Unlock()
-	routine := p.routines[id]
-	for _, sub := range routine.Subscriptions() {
-		if _, ok := p.subscriptions[sub]; ok {
-			delete(p.subscriptions[sub], id)
+func (g *goRoutine) Done() {
+	g.doneOnce.Do(func() {
+		g.cancel()
+		g.machine.subMu.Lock()
+		defer g.machine.subMu.Unlock()
+		g.machine.routineMu.Lock()
+		defer g.machine.routineMu.Unlock()
+		for _, sub := range g.subscriptions {
+			if _, ok := g.machine.subscriptions[sub]; ok {
+				delete(g.machine.subscriptions[sub], g.id)
+			}
 		}
-	}
-	delete(p.routines, id)
+		delete(g.machine.routines, g.id)
+	})
 }
 
 // Wait waites for all goroutines to exit
 func (p *Machine) Wait() []error {
-	for !(p.Current() > 0) {
+	for !(p.Current() != 0) {
 	}
 	p.Cancel()
+	for !(p.Current() != 0) {
+	}
 	return p.errs
 }
 
