@@ -8,6 +8,7 @@
 ```go
 var Cancel = errors.New("[machine] cancel")
 ```
+if a goroutine returns this error, every goroutines context will be cancelled
 
 #### type Machine
 
@@ -16,20 +17,24 @@ type Machine struct {
 }
 ```
 
-Machine is just like sync.WaitGroup, except it lets you throttle max goroutines.
+Machine is a runtime for managed goroutines. It is inspired by errgroup.Group
+with extra bells & whistles: - throttled goroutines - cancellable goroutines -
+publish/subscribe to channels for passing messages between goroutines - tagging
+goroutines for debugging(see Stats)
 
 #### func  New
 
 ```go
 func New(ctx context.Context, opts *Opts) (*Machine, error)
 ```
+New Creates a new machine instance
 
 #### func (*Machine) Cancel
 
 ```go
 func (p *Machine) Cancel()
 ```
-Cancel cancels every functions context
+Cancel cancels every goroutines context
 
 #### func (*Machine) Current
 
@@ -38,16 +43,10 @@ func (p *Machine) Current() int
 ```
 Current returns current managed goroutine count
 
-#### func (*Machine) Finished
-
-```go
-func (p *Machine) Finished() bool
-```
-
 #### func (*Machine) Go
 
 ```go
-func (p *Machine) Go(f func(ctx context.Context) error, tags ...string)
+func (m *Machine) Go(fn func(routine Routine) error, tags ...string)
 ```
 Go calls the given function in a new goroutine.
 
@@ -60,40 +59,84 @@ Wait.
 ```go
 func (m *Machine) Stats() Stats
 ```
+Stats returns Goroutine information
 
 #### func (*Machine) Wait
 
 ```go
 func (p *Machine) Wait() []error
 ```
+Wait waites for all goroutines to exit
 
 #### type Opts
 
 ```go
 type Opts struct {
+	// MaxRoutines throttles goroutines at the given count
 	MaxRoutines int
-	Debug       bool
+	// Debug enables debug logs
+	Debug            bool
+	PubChannelLength int
+	SubChannelLength int
 }
 ```
 
+Opts are options when creating a machine instance
 
 #### type Routine
 
 ```go
-type Routine struct {
-	ID       string
-	Tags     []string
-	Start    time.Time
-	Duration time.Duration
+type Routine interface {
+	// Context returns the goroutines unique context that may be used for cancellation
+	Context() context.Context
+	// ID() is the goroutines unique id
+	ID() string
+	// Tags() are the tags associated with the goroutine
+	Tags() []string
+	// Start is when the goroutine started
+	Start() time.Time
+	// Duration is the duration since the goroutine started
+	Duration() time.Duration
+	// PublishTo starts a stream that may be published to from the routine. It listens on the returned channel.
+	PublishTo(channel string) chan interface{}
+	// SubscribeTo subscribes to a channel & returns a go channel
+	SubscribeTo(channel string) chan interface{}
+	// Subscriptions returns the channels that this goroutine is subscribed to
+	Subscriptions() []string
+	//Done cancels the context of the current goroutine & kills any of it's subscriptions
+	Done()
 }
 ```
 
+Routine is an interface representing a goroutine
+
+#### type RoutineStats
+
+```go
+type RoutineStats struct {
+	ID            string        `json:"id"`
+	Start         time.Time     `json:"start"`
+	Duration      time.Duration `json:"duration"`
+	Tags          []string      `json:"tags"`
+	Subscriptions []string      `json:"subscriptions"`
+}
+```
+
+RoutineStats holds information about a single goroutine
 
 #### type Stats
 
 ```go
 type Stats struct {
-	Count    int
-	Routines map[string]*Routine
+	Count    int                     `json:"count"`
+	Routines map[string]RoutineStats `json:"routines"`
 }
+```
+
+Stats holds information about goroutines
+
+#### func (Stats) String
+
+```go
+func (s Stats) String() string
 ```
