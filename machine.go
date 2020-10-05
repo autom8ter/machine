@@ -70,8 +70,8 @@ func New(ctx context.Context, options ...Opt) (*Machine, error) {
 
 // Current returns current managed goroutine count
 func (p *Machine) Current() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return len(p.routines)
 }
 

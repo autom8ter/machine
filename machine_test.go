@@ -7,39 +7,23 @@ import (
 	"time"
 )
 
-func Test(t *testing.T) {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
+func runTest(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 	defer cancel()
-	m, err := machine.New(ctx, machine.WithMaxRoutines(100))
+	m, err := machine.New(ctx,
+		machine.WithMaxRoutines(3),
+		machine.WithPublishChannelBuffer(10),
+		machine.WithSubscribeChannelBuffer(10),
+	)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
-	for x := 0; x < 1000; x++ {
+	for x := 0; x < 100; x++ {
 		m.Go(func(routine machine.Routine) error {
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			return nil
 		})
-	}
-	time.Sleep(1 * time.Second)
-	stats := m.Stats()
-	t.Logf("stats = %s\n", stats)
-	if errs := m.Wait(); len(errs) > 0 {
-		for _, err := range errs {
-			t.Logf("workerPool error: %s", err)
-		}
-	}
-	if m.Current() != 0 {
-		t.Fatalf("expected current to be zero")
-	}
-}
-
-func TestPubSub(t *testing.T) {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(10*time.Second))
-	defer cancel()
-	m, err := machine.New(ctx, machine.WithMaxRoutines(100))
-	if err != nil {
-		t.Fatalf(err.Error())
 	}
 	channelName := "acme.com"
 	var seen = false
@@ -73,12 +57,41 @@ func TestPubSub(t *testing.T) {
 			}
 		}
 	}, "publish")
+	time.Sleep(1 * time.Second)
+	stats := m.Stats()
+	t.Logf("stats = %s\n", stats)
 	if errs := m.Wait(); len(errs) > 0 {
 		for _, err := range errs {
-			t.Fatalf(err.Error())
+			t.Logf("workerPool error: %s", err)
 		}
 	}
+	if m.Current() != 0 {
+		t.Fatalf("expected current to be zero")
+	}
 	if !seen {
-		t.Fatal("expected to have received a subscription msg")
+		t.Fatalf("expected to have received subscription msg")
+	}
+}
+
+func Test(t *testing.T) {
+	runTest(t)
+}
+
+/*
+MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
+goos: darwin
+goarch: amd64
+pkg: github.com/autom8ter/machine
+Benchmark-8       555478              2163 ns/op
+*/
+func Benchmark(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		m, err := machine.New(context.Background(), machine.WithMaxRoutines(5))
+		if err != nil {
+			b.Fatal(err.Error())
+		}
+		m.Go(func(routine machine.Routine) error {
+			return nil
+		})
 	}
 }
