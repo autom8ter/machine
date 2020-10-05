@@ -82,16 +82,24 @@ MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
 goos: darwin
 goarch: amd64
 pkg: github.com/autom8ter/machine
-Benchmark-8       555478              2163 ns/op
+Benchmark-8       585355              1457 ns/op
 */
 func Benchmark(b *testing.B) {
+	m, err := machine.New(context.Background(), machine.WithMaxRoutines(100))
+	if err != nil {
+		b.Fatal(err.Error())
+	}
 	for n := 0; n < b.N; n++ {
-		m, err := machine.New(context.Background(), machine.WithMaxRoutines(5))
-		if err != nil {
-			b.Fatal(err.Error())
-		}
 		m.Go(func(routine machine.Routine) error {
 			return nil
 		})
+	}
+	if errs := m.Wait(); len(errs) > 0 {
+		for _, err := range errs {
+			b.Logf("workerPool error: %s", err)
+		}
+	}
+	if m.Current() != 0 {
+		b.Fatalf("expected current to be zero")
 	}
 }
