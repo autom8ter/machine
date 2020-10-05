@@ -10,6 +10,15 @@ var Cancel = errors.New("[machine] cancel")
 ```
 if a goroutine returns this error, every goroutines context will be cancelled
 
+#### type Func
+
+```go
+type Func func(routine Routine) error
+```
+
+Func is the function passed into machine.Go. The Routine is passed into this
+function at runtime.
+
 #### type GoOpt
 
 ```go
@@ -95,13 +104,13 @@ Current returns current managed goroutine count
 #### func (*Machine) Go
 
 ```go
-func (m *Machine) Go(fn func(routine Routine) error, opts ...GoOpt)
+func (m *Machine) Go(fn Func, opts ...GoOpt)
 ```
 Go calls the given function in a new goroutine.
 
-The first call to return a non-nil error who's cause is CancelGroup cancels the
-context of every job. All errors that are not CancelGroup will be returned by
-Wait.
+The first call to return a non-nil error who's cause is machine.Cancel cancels
+the context of every job. All errors that are not of type machine.Cancel will be
+returned by Wait.
 
 #### func (*Machine) Stats
 
@@ -157,6 +166,14 @@ func (p *Machine) Wait() []error
 ```
 Wait waites for all goroutines to exit
 
+#### type Middleware
+
+```go
+type Middleware func(fn Func) Func
+```
+
+Middleware is a function that wraps/modifies the behavior of a machine.Func.
+
 #### type Opt
 
 ```go
@@ -179,6 +196,14 @@ func WithMaxRoutines(max int) Opt
 ```
 WithMaxRoutines throttles goroutines at the input number. It will panic if <=
 zero.
+
+#### func  WithMiddlewares
+
+```go
+func WithMiddlewares(middlewares ...Middleware) Opt
+```
+WithMiddlewares adds middlewares to the machine that will wrap every machine.Go
+Func that is executed by the machine instance.
 
 #### func  WithPublishChannelBuffer
 

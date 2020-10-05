@@ -28,6 +28,7 @@ Machine is a runtime for managed goroutines. It is inspired by errgroup.Group wi
 
 */
 type Machine struct {
+	middlewares   []Middleware
 	subChanLength int
 	pubChanLength int
 	cancel        func()
@@ -53,6 +54,7 @@ func New(ctx context.Context, options ...Opt) (*Machine, error) {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &Machine{
+		middlewares:   opts.middlewares,
 		subChanLength: opts.subChannelLength,
 		pubChanLength: opts.pubChannelLength,
 		cancel:        cancel,
@@ -96,13 +98,14 @@ func (m *Machine) addRoutine(opts *GoOpts) Routine {
 		opts.id = uuid()
 	}
 	routine := &goRoutine{
-		machine:  m,
-		ctx:      child,
-		id:       opts.id,
-		tags:     opts.tags,
-		start:    time.Now(),
-		doneOnce: sync.Once{},
-		cancel:   cancel,
+		machine:       m,
+		ctx:           child,
+		id:            opts.id,
+		tags:          opts.tags,
+		start:         time.Now(),
+		subscriptions: []string{},
+		doneOnce:      sync.Once{},
+		cancel:        cancel,
 	}
 	m.mu.Lock()
 	m.routines[opts.id] = routine
@@ -112,14 +115,19 @@ func (m *Machine) addRoutine(opts *GoOpts) Routine {
 
 // Go calls the given function in a new goroutine.
 //
-// The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
-// All errors that are not CancelGroup will be returned by Wait.
-func (m *Machine) Go(fn func(routine Routine) error, opts ...GoOpt) {
+// The first call to return a non-nil error who's cause is machine.Cancel cancels the context of every job.
+// All errors that are not of type machine.Cancel will be returned by Wait.
+func (m *Machine) Go(fn Func, opts ...GoOpt) {
 	o := &GoOpts{}
 	for _, opt := range opts {
 		opt(o)
 	}
 	routine := m.addRoutine(o)
+	if len(m.middlewares) > 0 {
+		for _, ware := range m.middlewares {
+			fn = ware(fn)
+		}
+	}
 	go func() {
 		defer routine.Done()
 		if err := fn(routine); err != nil {

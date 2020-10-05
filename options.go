@@ -1,7 +1,41 @@
 package machine
 
+import "time"
+
+// GoOpts holds options for creating a goroutine. It is configured via GoOpt functions.
+type GoOpts struct {
+	id      string
+	tags    []string
+	timeout *time.Duration
+}
+
+// GoOpt is a function that configures GoOpts
+type GoOpt func(o *GoOpts)
+
+// WithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
+func WithTags(tags ...string) GoOpt {
+	return func(o *GoOpts) {
+		o.tags = append(o.tags, tags...)
+	}
+}
+
+// WithID is a GoOpt that sets/overrides the ID of the Routine. A random uuid is assigned if this option is not used.
+func WithID(id string) GoOpt {
+	return func(o *GoOpts) {
+		o.id = id
+	}
+}
+
+// WithTimeout is a GoOpt that creates the Routine's context with the given timeout value
+func WithTimeout(to time.Duration) GoOpt {
+	return func(o *GoOpts) {
+		o.timeout = &to
+	}
+}
+
 // opts are options when creating a machine instance
 type option struct {
+	middlewares []Middleware
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines int
 	// Debug enables debug logs
@@ -41,5 +75,12 @@ func WithPublishChannelBuffer(length int) Opt {
 func WithSubscribeChannelBuffer(length int) Opt {
 	return func(o *option) {
 		o.subChannelLength = length
+	}
+}
+
+// WithMiddlewares adds middlewares to the machine that will wrap every machine.Go Func that is executed by the machine instance.
+func WithMiddlewares(middlewares ...Middleware) Opt {
+	return func(o *option) {
+		o.middlewares = append(o.middlewares, middlewares...)
 	}
 }
