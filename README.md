@@ -22,7 +22,7 @@ function at runtime.
 #### type GoOpt
 
 ```go
-type GoOpt func(o *GoOpts)
+type GoOpt func(o *goOpts)
 ```
 
 GoOpt is a function that configures GoOpts
@@ -50,16 +50,6 @@ func WithTimeout(to time.Duration) GoOpt
 WithTimeout is a GoOpt that creates the Routine's context with the given timeout
 value
 
-#### type GoOpts
-
-```go
-type GoOpts struct {
-}
-```
-
-GoOpts holds options for creating a goroutine. It is configured via GoOpt
-functions.
-
 #### type Machine
 
 ```go
@@ -67,8 +57,8 @@ type Machine struct {
 }
 ```
 
-Machine is a runtime for managed goroutines. It is inspired by errgroup.Group
-with extra bells & whistles:
+Machine is a zero dependency runtime for managed goroutines. It is inspired by
+errgroup.Group with extra bells & whistles:
 
 - throttled goroutines
 
@@ -76,7 +66,7 @@ with extra bells & whistles:
 
 - global-cancellable goroutines with context (see Cancel)
 
-- tagging goroutines for debugging(see Stats)
+- goroutines have IDs and optional tags for easy debugging(see Stats)
 
 - publish/subscribe to channels for passing messages between goroutines
 

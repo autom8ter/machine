@@ -10,11 +10,8 @@ import (
 	"time"
 )
 
-// if a goroutine returns this error, every goroutines context will be cancelled
-var Cancel = errors.New("[machine] cancel")
-
 /*
-Machine is a runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 
 - throttled goroutines
 
@@ -22,7 +19,7 @@ Machine is a runtime for managed goroutines. It is inspired by errgroup.Group wi
 
 - global-cancellable goroutines with context (see Cancel)
 
-- tagging goroutines for debugging(see Stats)
+- goroutines have IDs and optional tags for easy debugging(see Stats)
 
 - publish/subscribe to channels for passing messages between goroutines
 
@@ -77,7 +74,7 @@ func (p *Machine) Current() int {
 	return len(p.routines)
 }
 
-func (m *Machine) addRoutine(opts *GoOpts) Routine {
+func (m *Machine) addRoutine(opts *goOpts) Routine {
 	var (
 		child  context.Context
 		cancel func()
@@ -118,7 +115,7 @@ func (m *Machine) addRoutine(opts *GoOpts) Routine {
 // The first call to return a non-nil error who's cause is machine.Cancel cancels the context of every job.
 // All errors that are not of type machine.Cancel will be returned by Wait.
 func (m *Machine) Go(fn Func, opts ...GoOpt) {
-	o := &GoOpts{}
+	o := &goOpts{}
 	for _, opt := range opts {
 		opt(o)
 	}
