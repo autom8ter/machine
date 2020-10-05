@@ -24,6 +24,5 @@ type RoutineStats struct {
 	Start         time.Time     `json:"start"`
 	Duration      time.Duration `json:"duration"`
 	Tags          []string      `json:"tags"`
-	AddedAt       int           `json:"addedAt"`
 	Subscriptions []string      `json:"subscriptions"`
 }
