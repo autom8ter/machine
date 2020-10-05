@@ -25,15 +25,12 @@ type Routine interface {
 	SubscribeTo(channel string) chan interface{}
 	// Subscriptions returns the channels that this goroutine is subscribed to
 	Subscriptions() []string
-	// AddedAt returns the goroutine count before the goroutine was added
-	AddedAt() int
 	//Done cancels the context of the current goroutine & kills any of it's subscriptions
 	Done()
 }
 
 type goRoutine struct {
 	machine       *Machine
-	addedAt       int
 	ctx           context.Context
 	id            string
 	tags          []string
@@ -49,10 +46,6 @@ func (r *goRoutine) Context() context.Context {
 
 func (r *goRoutine) ID() string {
 	return r.id
-}
-
-func (r *goRoutine) AddedAt() int {
-	return r.addedAt
 }
 
 func (r *goRoutine) Tags() []string {

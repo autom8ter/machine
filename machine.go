@@ -87,7 +87,6 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 	id := uuid()
 	routine := &goRoutine{
 		machine:  m,
-		addedAt:  x,
 		ctx:      child,
 		id:       id,
 		tags:     tags,
@@ -140,7 +139,48 @@ func (p *Machine) Cancel() {
 	})
 }
 
-// Stats returns Goroutine information from the machine
+/*
+Stats returns Goroutine information from the machine
+example:
+
+{
+            "count": 3,
+            "routines": {
+                "021851f5-d9ac-0f31-3a89-ddfc454c5f8f": {
+                    "id": "021851f5-d9ac-0f31-3a89-ddfc454c5f8f",
+                    "start": "2020-10-04T20:00:21.061072-06:00",
+                    "duration": 3001366067,
+                    "tags": [
+                        "stream-to-acme.com"
+                    ],
+                    "addedAt": 0,
+                    "subscriptions": null
+                },
+                "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
+                    "id": "8afa3f85-b8a6-2708-caeb-bac880b5b89b",
+                    "start": "2020-10-04T20:00:21.011062-06:00",
+                    "duration": 3051375565,
+                    "tags": [
+                        "subscribe"
+                    ],
+                    "addedAt": 0,
+                    "subscriptions": [
+                        "acme.com"
+                    ]
+                },
+                "93da5381-0164-4021-04e6-48b6226a1b78": {
+                    "id": "93da5381-0164-4021-04e6-48b6226a1b78",
+                    "start": "2020-10-04T20:00:21.01107-06:00",
+                    "duration": 3051367098,
+                    "tags": [
+                        "publish"
+                    ],
+                    "addedAt": 0,
+                    "subscriptions": null
+                }
+     }
+}
+*/
 func (m *Machine) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
