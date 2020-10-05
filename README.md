@@ -10,6 +10,47 @@ var Cancel = errors.New("[machine] cancel")
 ```
 if a goroutine returns this error, every goroutines context will be cancelled
 
+#### type GoOpt
+
+```go
+type GoOpt func(o *GoOpts)
+```
+
+GoOpt is a function that configures GoOpts
+
+#### func  WithID
+
+```go
+func WithID(id string) GoOpt
+```
+WithID is a GoOpt that sets/overrides the ID of the Routine. A random uuid is
+assigned if this option is not used.
+
+#### func  WithTags
+
+```go
+func WithTags(tags ...string) GoOpt
+```
+WithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
+
+#### func  WithTimeout
+
+```go
+func WithTimeout(to time.Duration) GoOpt
+```
+WithTimeout is a GoOpt that creates the Routine's context with the given timeout
+value
+
+#### type GoOpts
+
+```go
+type GoOpts struct {
+}
+```
+
+GoOpts holds options for creating a goroutine. It is configured via GoOpt
+functions.
+
 #### type Machine
 
 ```go
@@ -54,7 +95,7 @@ Current returns current managed goroutine count
 #### func (*Machine) Go
 
 ```go
-func (m *Machine) Go(fn func(routine Routine) error, tags ...string)
+func (m *Machine) Go(fn func(routine Routine) error, opts ...GoOpt)
 ```
 Go calls the given function in a new goroutine.
 

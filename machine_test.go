@@ -39,7 +39,7 @@ func runTest(t *testing.T) {
 				t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
 			}
 		}
-	}, "subscribe")
+	}, machine.WithTags("subscribe"))
 	m.Go(func(routine machine.Routine) error {
 		channel := routine.PublishTo(channelName)
 		tick := time.NewTicker(1 * time.Second)
@@ -56,7 +56,7 @@ func runTest(t *testing.T) {
 				time.Sleep(1 * time.Second)
 			}
 		}
-	}, "publish")
+	}, machine.WithTags("publish"))
 	time.Sleep(1 * time.Second)
 	stats := m.Stats()
 	t.Logf("stats = %s\n", stats)

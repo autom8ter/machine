@@ -75,8 +75,16 @@ func (p *Machine) Current() int {
 	return len(p.routines)
 }
 
-func (m *Machine) addRoutine(tags ...string) Routine {
-	child, cancel := context.WithCancel(m.ctx)
+func (m *Machine) addRoutine(opts *GoOpts) Routine {
+	var (
+		child  context.Context
+		cancel func()
+	)
+	if opts.timeout != nil {
+		child, cancel = context.WithTimeout(m.ctx, *opts.timeout)
+	} else {
+		child, cancel = context.WithCancel(m.ctx)
+	}
 	var x int
 	for x = m.Current(); x >= m.max; x = m.Current() {
 		if m.ctx.Err() != nil {
@@ -84,18 +92,20 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 			return nil
 		}
 	}
-	id := uuid()
+	if opts.id == "" {
+		opts.id = uuid()
+	}
 	routine := &goRoutine{
 		machine:  m,
 		ctx:      child,
-		id:       id,
-		tags:     tags,
+		id:       opts.id,
+		tags:     opts.tags,
 		start:    time.Now(),
 		doneOnce: sync.Once{},
 		cancel:   cancel,
 	}
 	m.mu.Lock()
-	m.routines[id] = routine
+	m.routines[opts.id] = routine
 	m.mu.Unlock()
 	return routine
 }
@@ -104,8 +114,12 @@ func (m *Machine) addRoutine(tags ...string) Routine {
 //
 // The first call to return a non-nil error who's cause is CancelGroup cancels the context of every job.
 // All errors that are not CancelGroup will be returned by Wait.
-func (m *Machine) Go(fn func(routine Routine) error, tags ...string) {
-	routine := m.addRoutine(tags...)
+func (m *Machine) Go(fn func(routine Routine) error, opts ...GoOpt) {
+	o := &GoOpts{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	routine := m.addRoutine(o)
 	go func() {
 		defer routine.Done()
 		if err := fn(routine); err != nil {
