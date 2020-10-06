@@ -106,9 +106,7 @@ func (m *Machine) serve() {
 				}
 			}
 			for x := m.Current(); x >= m.max; x = m.Current() {
-				if m.ctx.Err() != nil {
-					return
-				}
+
 			}
 			if w.opts.id == 0 {
 				w.opts.id = rand.Int()
