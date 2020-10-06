@@ -35,6 +35,7 @@ func WithTimeout(to time.Duration) GoOpt {
 
 // opts are options when creating a machine instance
 type option struct {
+	errHandler  func(err error)
 	middlewares []Middleware
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines int

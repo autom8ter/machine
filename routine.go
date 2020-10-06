@@ -62,11 +62,11 @@ func (r *goRoutine) Duration() time.Duration {
 
 func (g *goRoutine) PublishTo(channel string) chan interface{} {
 	ch := make(chan interface{}, g.machine.pubChanLength)
-	g.machine.Go(func(routine Routine) error {
+	g.machine.Go(func(routine Routine) {
 		for {
 			select {
 			case <-routine.Context().Done():
-				return nil
+				return
 			case obj := <-ch:
 				if g.machine.subscriptions[channel] == nil {
 					g.machine.subMu.Lock()

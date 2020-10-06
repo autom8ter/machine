@@ -16,35 +16,33 @@ func runTest(t *testing.T) {
 		machine.WithSubscribeChannelBuffer(10),
 	)
 	for x := 0; x < 100; x++ {
-		m.Go(func(routine machine.Routine) error {
+		m.Go(func(routine machine.Routine) {
 			time.Sleep(50 * time.Millisecond)
-			return nil
+			return
 		})
 	}
 	channelName := "acme.com"
 	var seen = false
-	m.Go(func(routine machine.Routine) error {
+	m.Go(func(routine machine.Routine) {
 		channel := routine.SubscribeTo(channelName)
 		for {
 			select {
 			case <-routine.Context().Done():
-				close(channel)
-				return nil
+				return
 			case msg := <-channel:
 				seen = true
 				t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
 			}
 		}
 	}, machine.WithTags("subscribe"))
-	m.Go(func(routine machine.Routine) error {
+	m.Go(func(routine machine.Routine) {
 		channel := routine.PublishTo(channelName)
 		tick := time.NewTicker(1 * time.Second)
 		for {
 			select {
 			case <-routine.Context().Done():
 				tick.Stop()
-				close(channel)
-				return nil
+				return
 			case <-tick.C:
 				msg := "hey there bud!"
 				t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
@@ -56,13 +54,9 @@ func runTest(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	stats := m.Stats()
 	t.Logf("stats = %s\n", stats)
-	if errs := m.Wait(); len(errs) > 0 {
-		for _, err := range errs {
-			t.Logf("workerPool error: %s", err)
-		}
-	}
+	m.Wait()
 	if m.Current() != 0 {
-		t.Fatalf("expected current to be zero")
+		t.Fatalf("expected current to be zero, got: %v", m.Current())
 	}
 	if !seen {
 		t.Fatalf("expected to have received subscription msg")
@@ -78,24 +72,15 @@ MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
 goos: darwin
 goarch: amd64
 pkg: github.com/autom8ter/machine
-Benchmark-8      1159054              1034 ns/op             256 B/op          4 allocs/op
+Benchmark-8       860584              1366 ns/op             272 B/op          5 allocs/op
 */
 func Benchmark(b *testing.B) {
 	b.ReportAllocs()
 	m := machine.New(context.Background(), machine.WithMaxRoutines(100))
-	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		m.Go(func(routine machine.Routine) error {
-			return nil
+		m.Go(func(routine machine.Routine) {
+			return
 		})
 	}
-	if errs := m.Wait(); len(errs) > 0 {
-		for _, err := range errs {
-			b.Logf("workerPool error: %s", err)
-		}
-	}
-	b.StopTimer()
-	if m.Current() != 0 {
-		b.Fatalf("expected current to be zero")
-	}
+	m.Wait()
 }

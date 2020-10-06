@@ -13,7 +13,7 @@ if a goroutine returns this error, every goroutines context will be cancelled
 #### type Func
 
 ```go
-type Func func(routine Routine) error
+type Func func(routine Routine)
 ```
 
 Func is the function passed into machine.Go. The Routine is passed into this
@@ -27,13 +27,13 @@ type GoOpt func(o *goOpts)
 
 GoOpt is a function that configures GoOpts
 
-#### func  WithID
+#### func  WithPID
 
 ```go
-func WithID(id string) GoOpt
+func WithPID(id int) GoOpt
 ```
-WithID is a GoOpt that sets/overrides the ID of the Routine. A random uuid is
-assigned if this option is not used.
+WithPID is a GoOpt that sets/overrides the process ID of the Routine. A random
+id is assigned if this option is not used.
 
 #### func  WithTags
 
@@ -149,9 +149,9 @@ Stats returns Goroutine information from the machine example:
 #### func (*Machine) Wait
 
 ```go
-func (p *Machine) Wait() []error
+func (m *Machine) Wait()
 ```
-Wait waites for all goroutines to exit
+Wait waits for all goroutines to exit
 
 #### type Middleware
 
@@ -214,8 +214,8 @@ Routine subscribeTo
 type Routine interface {
 	// Context returns the goroutines unique context that may be used for cancellation
 	Context() context.Context
-	// ID() is the goroutines unique id
-	ID() string
+	// PID() is the goroutines unique process id
+	PID() int
 	// Tags() are the tags associated with the goroutine
 	Tags() []string
 	// Start is when the goroutine started
@@ -239,7 +239,7 @@ Routine is an interface representing a goroutine
 
 ```go
 type RoutineStats struct {
-	ID            string        `json:"id"`
+	PID           int           `json:"pid"`
 	Start         time.Time     `json:"start"`
 	Duration      time.Duration `json:"duration"`
 	Tags          []string      `json:"tags"`

@@ -4,7 +4,6 @@ package machine
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -26,18 +25,24 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 */
 type Machine struct {
+	done          chan struct{}
 	middlewares   []Middleware
 	subChanLength int
 	pubChanLength int
 	cancel        func()
 	ctx           context.Context
-	errs          []error
+	workQueue     chan *work
 	mu            sync.RWMutex
 	routines      map[int]Routine
 	max           int
 	closeOnce     sync.Once
 	subscriptions map[string]map[int]chan interface{}
 	subMu         sync.RWMutex
+}
+
+type work struct {
+	opts *goOpts
+	fn   Func
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -50,13 +55,14 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		opts.maxRoutines = 10000
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	return &Machine{
+	m := &Machine{
+		done:          make(chan struct{}, 1),
 		middlewares:   opts.middlewares,
 		subChanLength: opts.subChannelLength,
 		pubChanLength: opts.pubChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
-		errs:          nil,
+		workQueue:     make(chan *work, 10000),
 		mu:            sync.RWMutex{},
 		routines:      map[int]Routine{},
 		max:           opts.maxRoutines,
@@ -64,6 +70,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		subscriptions: map[string]map[int]chan interface{}{},
 		subMu:         sync.RWMutex{},
 	}
+	go m.serve()
+	return m
 }
 
 // Current returns current managed goroutine count
@@ -71,41 +79,6 @@ func (p *Machine) Current() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.routines)
-}
-
-func (m *Machine) addRoutine(opts *goOpts) Routine {
-	var (
-		child  context.Context
-		cancel func()
-	)
-	if opts.timeout != nil {
-		child, cancel = context.WithTimeout(m.ctx, *opts.timeout)
-	} else {
-		child, cancel = context.WithCancel(m.ctx)
-	}
-	for x := m.Current(); x >= m.max; x = m.Current() {
-		if m.ctx.Err() != nil {
-			cancel()
-			return nil
-		}
-	}
-	if opts.id == 0 {
-		opts.id = rand.Int()
-	}
-	routine := &goRoutine{
-		machine:       m,
-		ctx:           child,
-		id:            opts.id,
-		tags:          opts.tags,
-		start:         time.Now(),
-		subscriptions: []string{},
-		doneOnce:      sync.Once{},
-		cancel:        cancel,
-	}
-	m.mu.Lock()
-	m.routines[opts.id] = routine
-	m.mu.Unlock()
-	return routine
 }
 
 // Go calls the given function in a new goroutine.
@@ -117,34 +90,72 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 	for _, opt := range opts {
 		opt(o)
 	}
-	routine := m.addRoutine(o)
 	if len(m.middlewares) > 0 {
 		for _, ware := range m.middlewares {
 			fn = ware(fn)
 		}
 	}
-	go func() {
-		defer routine.Done()
-		if err := fn(routine); err != nil {
-			if errors.Unwrap(err) == Cancel {
-				m.Cancel()
-			} else {
-				m.addErr(err)
-			}
+	if m.ctx.Err() == nil {
+		m.workQueue <- &work{
+			opts: o,
+			fn:   fn,
 		}
-	}()
-}
-
-func (p *Machine) addErr(err error) {
-	p.errs = append(p.errs, err)
-}
-
-// Wait waites for all goroutines to exit
-func (p *Machine) Wait() []error {
-	for p.Current() != 0 {
 	}
-	p.Cancel()
-	return p.errs
+}
+
+// serve waites for all goroutines to exit
+func (m *Machine) serve() {
+	for {
+		select {
+		case <-m.done:
+			return
+		case w := <-m.workQueue:
+			for x := m.Current(); x >= m.max; x = m.Current() {
+				if m.ctx.Err() != nil {
+					return
+				}
+			}
+			if w.opts.id == 0 {
+				w.opts.id = rand.Int()
+			}
+			var (
+				child  context.Context
+				cancel func()
+			)
+			if w.opts.timeout != nil {
+				child, cancel = context.WithTimeout(m.ctx, *w.opts.timeout)
+			} else {
+				child, cancel = context.WithCancel(m.ctx)
+			}
+			routine := &goRoutine{
+				machine:       m,
+				ctx:           child,
+				id:            w.opts.id,
+				tags:          w.opts.tags,
+				start:         time.Now(),
+				subscriptions: []string{},
+				doneOnce:      sync.Once{},
+				cancel:        cancel,
+			}
+			m.mu.Lock()
+			m.routines[w.opts.id] = routine
+			m.mu.Unlock()
+			go func() {
+				defer routine.Done()
+				w.fn(routine)
+			}()
+		}
+	}
+}
+
+// Wait waits for all goroutines to exit
+func (m *Machine) Wait() {
+	for m.Current() > 0 {
+		for len(m.workQueue) > 0 {
+		}
+	}
+	m.Cancel()
+	m.done <- struct{}{}
 }
 
 // Cancel cancels every goroutines context
