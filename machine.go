@@ -28,7 +28,6 @@ type Machine struct {
 	done          chan struct{}
 	middlewares   []Middleware
 	subChanLength int
-	pubChanLength int
 	cancel        func()
 	ctx           context.Context
 	workQueue     chan *work
@@ -54,7 +53,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		done:          make(chan struct{}, 1),
 		middlewares:   opts.middlewares,
 		subChanLength: opts.subChannelLength,
-		pubChanLength: opts.pubChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
 		workQueue:     make(chan *work),

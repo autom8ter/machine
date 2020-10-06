@@ -159,13 +159,6 @@ type Opt func(o *option)
 
 Opt is a single option when creating a machine instance with New
 
-#### func  WithDebug
-
-```go
-func WithDebug(debug bool) Opt
-```
-WithDebug enables debug mode
-
 #### func  WithMaxRoutines
 
 ```go
@@ -181,14 +174,6 @@ func WithMiddlewares(middlewares ...Middleware) Opt
 ```
 WithMiddlewares adds middlewares to the machine that will wrap every machine.Go
 Func that is executed by the machine instance.
-
-#### func  WithPublishChannelBuffer
-
-```go
-func WithPublishChannelBuffer(length int) Opt
-```
-WithPublishChannelBuffer sets the buffer length of the channel returned from a
-goroutine publishTo
 
 #### func  WithSubscribeChannelBuffer
 

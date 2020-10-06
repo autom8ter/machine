@@ -12,7 +12,6 @@ func runTest(t *testing.T) {
 	defer cancel()
 	m := machine.New(ctx,
 		machine.WithMaxRoutines(3),
-		machine.WithPublishChannelBuffer(10),
 		machine.WithSubscribeChannelBuffer(10),
 	)
 	for x := 0; x < 100; x++ {
