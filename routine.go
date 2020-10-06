@@ -11,8 +11,8 @@ import (
 type Routine interface {
 	// Context returns the goroutines unique context that may be used for cancellation
 	Context() context.Context
-	// ID() is the goroutines unique id
-	ID() string
+	// PID() is the goroutines unique process id
+	PID() int
 	// Tags() are the tags associated with the goroutine
 	Tags() []string
 	// Start is when the goroutine started
@@ -32,7 +32,7 @@ type Routine interface {
 type goRoutine struct {
 	machine       *Machine
 	ctx           context.Context
-	id            string
+	id            int
 	tags          []string
 	start         time.Time
 	subscriptions []string
@@ -44,7 +44,7 @@ func (r *goRoutine) Context() context.Context {
 	return r.ctx
 }
 
-func (r *goRoutine) ID() string {
+func (r *goRoutine) PID() int {
 	return r.id
 }
 
@@ -70,7 +70,7 @@ func (g *goRoutine) PublishTo(channel string) chan interface{} {
 			case obj := <-ch:
 				if g.machine.subscriptions[channel] == nil {
 					g.machine.subMu.Lock()
-					g.machine.subscriptions[channel] = map[string]chan interface{}{}
+					g.machine.subscriptions[channel] = map[int]chan interface{}{}
 					g.machine.subMu.Unlock()
 				}
 				channelSubscribers := g.machine.subscriptions[channel]
@@ -88,7 +88,7 @@ func (g *goRoutine) SubscribeTo(channel string) chan interface{} {
 	defer g.machine.subMu.Unlock()
 	ch := make(chan interface{}, g.machine.subChanLength)
 	if g.machine.subscriptions[channel] == nil {
-		g.machine.subscriptions[channel] = map[string]chan interface{}{}
+		g.machine.subscriptions[channel] = map[int]chan interface{}{}
 	}
 	g.machine.subscriptions[channel][g.id] = ch
 	g.subscriptions = append(g.subscriptions, channel)
@@ -102,15 +102,15 @@ func (g *goRoutine) Subscriptions() []string {
 func (g *goRoutine) Done() {
 	g.doneOnce.Do(func() {
 		g.cancel()
-		g.machine.mu.Lock()
-		defer g.machine.mu.Unlock()
 		g.machine.subMu.Lock()
-		defer g.machine.subMu.Unlock()
 		for _, sub := range g.subscriptions {
 			if _, ok := g.machine.subscriptions[sub]; ok {
 				delete(g.machine.subscriptions[sub], g.id)
 			}
 		}
+		g.machine.subMu.Unlock()
+		g.machine.mu.Lock()
 		delete(g.machine.routines, g.id)
+		g.machine.mu.Unlock()
 	})
 }

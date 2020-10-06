@@ -4,7 +4,7 @@ import "time"
 
 // goOpts holds options for creating a goroutine. It is configured via GoOpt functions.
 type goOpts struct {
-	id      string
+	id      int
 	tags    []string
 	timeout *time.Duration
 }
@@ -19,8 +19,8 @@ func WithTags(tags ...string) GoOpt {
 	}
 }
 
-// WithID is a GoOpt that sets/overrides the ID of the Routine. A random uuid is assigned if this option is not used.
-func WithID(id string) GoOpt {
+// WithPID is a GoOpt that sets/overrides the process ID of the Routine. A random id is assigned if this option is not used.
+func WithPID(id int) GoOpt {
 	return func(o *goOpts) {
 		o.id = id
 	}

@@ -78,7 +78,7 @@ MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
 goos: darwin
 goarch: amd64
 pkg: github.com/autom8ter/machine
-Benchmark-8       844700              1382 ns/op             312 B/op          6 allocs/op
+Benchmark-8      1159054              1034 ns/op             256 B/op          4 allocs/op
 */
 func Benchmark(b *testing.B) {
 	b.ReportAllocs()

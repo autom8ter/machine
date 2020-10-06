@@ -5,7 +5,8 @@ package machine
 import (
 	"context"
 	"errors"
-	"fmt"
+	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -32,10 +33,10 @@ type Machine struct {
 	ctx           context.Context
 	errs          []error
 	mu            sync.RWMutex
-	routines      map[string]Routine
+	routines      map[int]Routine
 	max           int
 	closeOnce     sync.Once
-	subscriptions map[string]map[string]chan interface{}
+	subscriptions map[string]map[int]chan interface{}
 	subMu         sync.RWMutex
 }
 
@@ -57,10 +58,10 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		ctx:           ctx,
 		errs:          nil,
 		mu:            sync.RWMutex{},
-		routines:      map[string]Routine{},
+		routines:      map[int]Routine{},
 		max:           opts.maxRoutines,
 		closeOnce:     sync.Once{},
-		subscriptions: map[string]map[string]chan interface{}{},
+		subscriptions: map[string]map[int]chan interface{}{},
 		subMu:         sync.RWMutex{},
 	}
 }
@@ -82,15 +83,14 @@ func (m *Machine) addRoutine(opts *goOpts) Routine {
 	} else {
 		child, cancel = context.WithCancel(m.ctx)
 	}
-	var x int
-	for x = m.Current(); x >= m.max; x = m.Current() {
+	for x := m.Current(); x >= m.max; x = m.Current() {
 		if m.ctx.Err() != nil {
 			cancel()
 			return nil
 		}
 	}
-	if opts.id == "" {
-		opts.id = fmt.Sprintf("%v-%v", x, time.Now().UnixNano())
+	if opts.id == 0 {
+		opts.id = rand.Int()
 	}
 	routine := &goRoutine{
 		machine:       m,
@@ -198,13 +198,11 @@ example:
 func (m *Machine) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	m.subMu.RLock()
-	defer m.subMu.RUnlock()
 	copied := map[string]RoutineStats{}
 	for k, v := range m.routines {
 		if v != nil {
-			copied[k] = RoutineStats{
-				ID:            v.ID(),
+			copied[strconv.Itoa(k)] = RoutineStats{
+				PID:           v.PID(),
 				Start:         v.Start(),
 				Duration:      v.Duration(),
 				Tags:          v.Tags(),
