@@ -10,15 +10,11 @@ import (
 func runTest(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 	defer cancel()
-	m, err := machine.New(ctx,
+	m := machine.New(ctx,
 		machine.WithMaxRoutines(3),
 		machine.WithPublishChannelBuffer(10),
 		machine.WithSubscribeChannelBuffer(10),
 	)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
 	for x := 0; x < 100; x++ {
 		m.Go(func(routine machine.Routine) error {
 			time.Sleep(50 * time.Millisecond)
@@ -82,13 +78,12 @@ MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
 goos: darwin
 goarch: amd64
 pkg: github.com/autom8ter/machine
-Benchmark-8       585355              1457 ns/op
+Benchmark-8       844700              1382 ns/op             312 B/op          6 allocs/op
 */
 func Benchmark(b *testing.B) {
-	m, err := machine.New(context.Background(), machine.WithMaxRoutines(100))
-	if err != nil {
-		b.Fatal(err.Error())
-	}
+	b.ReportAllocs()
+	m := machine.New(context.Background(), machine.WithMaxRoutines(100))
+	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine machine.Routine) error {
 			return nil
@@ -99,6 +94,7 @@ func Benchmark(b *testing.B) {
 			b.Logf("workerPool error: %s", err)
 		}
 	}
+	b.StopTimer()
 	if m.Current() != 0 {
 		b.Fatalf("expected current to be zero")
 	}

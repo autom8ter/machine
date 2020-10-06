@@ -73,7 +73,7 @@ errgroup.Group with extra bells & whistles:
 #### func  New
 
 ```go
-func New(ctx context.Context, options ...Opt) (*Machine, error)
+func New(ctx context.Context, options ...Opt) *Machine
 ```
 New Creates a new machine instance with the given root context & options
 
@@ -120,7 +120,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "stream-to-acme.com"
                    ],
-                   "addedAt": 0,
                    "subscriptions": null
                },
                "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
@@ -130,7 +129,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "subscribe"
                    ],
-                   "addedAt": 0,
                    "subscriptions": [
                        "acme.com"
                    ]
@@ -142,7 +140,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "publish"
                    ],
-                   "addedAt": 0,
                    "subscriptions": null
                }
     }

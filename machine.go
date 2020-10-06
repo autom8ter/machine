@@ -35,13 +35,12 @@ type Machine struct {
 	routines      map[string]Routine
 	max           int
 	closeOnce     sync.Once
-	debug         bool
 	subscriptions map[string]map[string]chan interface{}
 	subMu         sync.RWMutex
 }
 
 // New Creates a new machine instance with the given root context & options
-func New(ctx context.Context, options ...Opt) (*Machine, error) {
+func New(ctx context.Context, options ...Opt) *Machine {
 	opts := &option{}
 	for _, o := range options {
 		o(opts)
@@ -61,10 +60,9 @@ func New(ctx context.Context, options ...Opt) (*Machine, error) {
 		routines:      map[string]Routine{},
 		max:           opts.maxRoutines,
 		closeOnce:     sync.Once{},
-		debug:         false,
 		subscriptions: map[string]map[string]chan interface{}{},
 		subMu:         sync.RWMutex{},
-	}, nil
+	}
 }
 
 // Current returns current managed goroutine count
@@ -92,7 +90,7 @@ func (m *Machine) addRoutine(opts *goOpts) Routine {
 		}
 	}
 	if opts.id == "" {
-		opts.id = uuid()
+		opts.id = fmt.Sprintf("%v-%v", x, time.Now().UnixNano())
 	}
 	routine := &goRoutine{
 		machine:       m,
@@ -172,7 +170,6 @@ example:
                     "tags": [
                         "stream-to-acme.com"
                     ],
-                    "addedAt": 0,
                     "subscriptions": null
                 },
                 "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
@@ -182,7 +179,6 @@ example:
                     "tags": [
                         "subscribe"
                     ],
-                    "addedAt": 0,
                     "subscriptions": [
                         "acme.com"
                     ]
@@ -194,7 +190,6 @@ example:
                     "tags": [
                         "publish"
                     ],
-                    "addedAt": 0,
                     "subscriptions": null
                 }
      }
@@ -220,11 +215,5 @@ func (m *Machine) Stats() Stats {
 	return Stats{
 		Count:    len(copied),
 		Routines: copied,
-	}
-}
-
-func (p *Machine) debugf(format string, a ...interface{}) {
-	if p.debug {
-		fmt.Printf(format, a...)
 	}
 }
