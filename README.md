@@ -5,11 +5,6 @@
 
 ## Usage
 
-```go
-var Cancel = errors.New("[machine] cancel")
-```
-if a goroutine returns this error, every goroutines context will be cancelled
-
 #### type Func
 
 ```go
@@ -120,7 +115,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "stream-to-acme.com"
                    ],
-                   "subscriptions": null
                },
                "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
                    "id": "8afa3f85-b8a6-2708-caeb-bac880b5b89b",
@@ -129,9 +123,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "subscribe"
                    ],
-                   "subscriptions": [
-                       "acme.com"
-                   ]
                },
                "93da5381-0164-4021-04e6-48b6226a1b78": {
                    "id": "93da5381-0164-4021-04e6-48b6226a1b78",
@@ -140,7 +131,6 @@ Stats returns Goroutine information from the machine example:
                    "tags": [
                        "publish"
                    ],
-                   "subscriptions": null
                }
     }
 
@@ -151,7 +141,7 @@ Stats returns Goroutine information from the machine example:
 ```go
 func (m *Machine) Wait()
 ```
-Wait waits for all goroutines to exit
+Wait blocks until all goroutines exit
 
 #### type Middleware
 
@@ -222,14 +212,10 @@ type Routine interface {
 	Start() time.Time
 	// Duration is the duration since the goroutine started
 	Duration() time.Duration
-	// PublishTo starts a stream that may be published to from the routine. It listens on the returned channel.
-	PublishTo(channel string) chan interface{}
-	// SubscribeTo subscribes to a channel & returns a go channel
-	SubscribeTo(channel string) chan interface{}
-	// Subscriptions returns the channels that this goroutine is subscribed to
-	Subscriptions() []string
-	//Done cancels the context of the current goroutine & kills any of it's subscriptions
-	Done()
+	// Publish publishes the object to the given channel
+	Publish(channel string, obj interface{})
+	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
+	Subscribe(channel string, handler func(obj interface{}))
 }
 ```
 
@@ -239,11 +225,10 @@ Routine is an interface representing a goroutine
 
 ```go
 type RoutineStats struct {
-	PID           int           `json:"pid"`
-	Start         time.Time     `json:"start"`
-	Duration      time.Duration `json:"duration"`
-	Tags          []string      `json:"tags"`
-	Subscriptions []string      `json:"subscriptions"`
+	PID      int           `json:"pid"`
+	Start    time.Time     `json:"start"`
+	Duration time.Duration `json:"duration"`
+	Tags     []string      `json:"tags"`
 }
 ```
 

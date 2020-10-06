@@ -20,9 +20,8 @@ func (s Stats) String() string {
 
 // RoutineStats holds information about a single goroutine
 type RoutineStats struct {
-	PID           int           `json:"pid"`
-	Start         time.Time     `json:"start"`
-	Duration      time.Duration `json:"duration"`
-	Tags          []string      `json:"tags"`
-	Subscriptions []string      `json:"subscriptions"`
+	PID      int           `json:"pid"`
+	Start    time.Time     `json:"start"`
+	Duration time.Duration `json:"duration"`
+	Tags     []string      `json:"tags"`
 }

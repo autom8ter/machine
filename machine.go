@@ -40,11 +40,6 @@ type Machine struct {
 	subMu         sync.RWMutex
 }
 
-type work struct {
-	opts *goOpts
-	fn   Func
-}
-
 // New Creates a new machine instance with the given root context & options
 func New(ctx context.Context, options ...Opt) *Machine {
 	opts := &option{}
@@ -62,7 +57,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		pubChanLength: opts.pubChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
-		workQueue:     make(chan *work, 10000),
+		workQueue:     make(chan *work),
 		mu:            sync.RWMutex{},
 		routines:      map[int]Routine{},
 		max:           opts.maxRoutines,
@@ -90,11 +85,6 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 	for _, opt := range opts {
 		opt(o)
 	}
-	if len(m.middlewares) > 0 {
-		for _, ware := range m.middlewares {
-			fn = ware(fn)
-		}
-	}
 	if m.ctx.Err() == nil {
 		m.workQueue <- &work{
 			opts: o,
@@ -110,6 +100,11 @@ func (m *Machine) serve() {
 		case <-m.done:
 			return
 		case w := <-m.workQueue:
+			if len(m.middlewares) > 0 {
+				for _, ware := range m.middlewares {
+					w.fn = ware(w.fn)
+				}
+			}
 			for x := m.Current(); x >= m.max; x = m.Current() {
 				if m.ctx.Err() != nil {
 					return
@@ -128,27 +123,26 @@ func (m *Machine) serve() {
 				child, cancel = context.WithCancel(m.ctx)
 			}
 			routine := &goRoutine{
-				machine:       m,
-				ctx:           child,
-				id:            w.opts.id,
-				tags:          w.opts.tags,
-				start:         time.Now(),
-				subscriptions: []string{},
-				doneOnce:      sync.Once{},
-				cancel:        cancel,
+				machine:  m,
+				ctx:      child,
+				id:       w.opts.id,
+				tags:     w.opts.tags,
+				start:    time.Now(),
+				doneOnce: sync.Once{},
+				cancel:   cancel,
 			}
 			m.mu.Lock()
 			m.routines[w.opts.id] = routine
 			m.mu.Unlock()
 			go func() {
-				defer routine.Done()
+				defer routine.done()
 				w.fn(routine)
 			}()
 		}
 	}
 }
 
-// Wait waits for all goroutines to exit
+// Wait blocks until all goroutines exit
 func (m *Machine) Wait() {
 	for m.Current() > 0 {
 		for len(m.workQueue) > 0 {
@@ -181,7 +175,6 @@ example:
                     "tags": [
                         "stream-to-acme.com"
                     ],
-                    "subscriptions": null
                 },
                 "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
                     "id": "8afa3f85-b8a6-2708-caeb-bac880b5b89b",
@@ -190,9 +183,6 @@ example:
                     "tags": [
                         "subscribe"
                     ],
-                    "subscriptions": [
-                        "acme.com"
-                    ]
                 },
                 "93da5381-0164-4021-04e6-48b6226a1b78": {
                     "id": "93da5381-0164-4021-04e6-48b6226a1b78",
@@ -201,7 +191,6 @@ example:
                     "tags": [
                         "publish"
                     ],
-                    "subscriptions": null
                 }
      }
 }
@@ -213,11 +202,10 @@ func (m *Machine) Stats() Stats {
 	for k, v := range m.routines {
 		if v != nil {
 			copied[strconv.Itoa(k)] = RoutineStats{
-				PID:           v.PID(),
-				Start:         v.Start(),
-				Duration:      v.Duration(),
-				Tags:          v.Tags(),
-				Subscriptions: v.Subscriptions(),
+				PID:      v.PID(),
+				Start:    v.Start(),
+				Duration: v.Duration(),
+				Tags:     v.Tags(),
 			}
 		}
 	}

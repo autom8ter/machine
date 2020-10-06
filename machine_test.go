@@ -24,19 +24,12 @@ func runTest(t *testing.T) {
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine machine.Routine) {
-		channel := routine.SubscribeTo(channelName)
-		for {
-			select {
-			case <-routine.Context().Done():
-				return
-			case msg := <-channel:
-				seen = true
-				t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
-			}
-		}
+		routine.Subscribe(channelName, func(obj interface{}) {
+			seen = true
+			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
+		})
 	}, machine.WithTags("subscribe"))
 	m.Go(func(routine machine.Routine) {
-		channel := routine.PublishTo(channelName)
 		tick := time.NewTicker(1 * time.Second)
 		for {
 			select {
@@ -46,7 +39,7 @@ func runTest(t *testing.T) {
 			case <-tick.C:
 				msg := "hey there bud!"
 				t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
-				channel <- msg
+				routine.Publish(channelName, msg)
 				time.Sleep(1 * time.Second)
 			}
 		}
