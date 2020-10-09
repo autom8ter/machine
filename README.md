@@ -5,6 +5,22 @@
 
 ## Usage
 
+```go
+var ErrNoExist = errors.New("machine: does not exit")
+```
+
+#### type Cache
+
+```go
+type Cache interface {
+	Get(key string) (interface{}, error)
+	Range(fn func(k string, val interface{}) bool) error
+	Set(key string, val interface{}) error
+	Del(key string) error
+}
+```
+
+
 #### type Func
 
 ```go
@@ -71,6 +87,12 @@ errgroup.Group with extra bells & whistles:
 func New(ctx context.Context, options ...Opt) *Machine
 ```
 New Creates a new machine instance with the given root context & options
+
+#### func (*Machine) Cache
+
+```go
+func (m *Machine) Cache() Cache
+```
 
 #### func (*Machine) Cancel
 
@@ -158,6 +180,14 @@ type Opt func(o *option)
 ```
 
 Opt is a single option when creating a machine instance with New
+
+#### func  WithCache
+
+```go
+func WithCache(cache Cache) Opt
+```
+WithCache sets the in memory, concurrency safe cache. If not set, a default
+sync.Map implementation is used.
 
 #### func  WithMaxRoutines
 

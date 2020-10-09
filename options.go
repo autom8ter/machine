@@ -39,6 +39,7 @@ type option struct {
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines      int
 	subChannelLength int
+	cache            Cache
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -65,5 +66,12 @@ func WithSubscribeChannelBuffer(length int) Opt {
 func WithMiddlewares(middlewares ...Middleware) Opt {
 	return func(o *option) {
 		o.middlewares = append(o.middlewares, middlewares...)
+	}
+}
+
+// WithCache sets the in memory, concurrency safe cache. If not set, a default sync.Map implementation is used.
+func WithCache(cache Cache) Opt {
+	return func(o *option) {
+		o.cache = cache
 	}
 }

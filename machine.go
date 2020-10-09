@@ -25,6 +25,7 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 */
 type Machine struct {
+	cache         Cache
 	done          chan struct{}
 	middlewares   []Middleware
 	subChanLength int
@@ -48,6 +49,9 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.maxRoutines <= 0 {
 		opts.maxRoutines = 10000
 	}
+	if opts.cache == nil {
+		opts.cache = &cache{data: &sync.Map{}}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
 		done:          make(chan struct{}, 1),
@@ -65,6 +69,10 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	go m.serve()
 	return m
+}
+
+func (m *Machine) Cache() Cache {
+	return m.cache
 }
 
 // Current returns current managed goroutine count
