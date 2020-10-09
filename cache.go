@@ -24,7 +24,7 @@ type cache struct {
 	data *sync.Map
 }
 
-func (c cache) Get(key string) (interface{}, error) {
+func (c *cache) Get(key string) (interface{}, error) {
 	val, ok := c.data.Load(key)
 	if !ok {
 		return val, ErrNoExist
@@ -32,19 +32,19 @@ func (c cache) Get(key string) (interface{}, error) {
 	return val, nil
 }
 
-func (c cache) Range(fn func(k string, val interface{}) bool) error {
+func (c *cache) Range(fn func(k string, val interface{}) bool) error {
 	c.data.Range(func(key, value interface{}) bool {
 		return fn(key.(string), value)
 	})
 	return nil
 }
 
-func (c cache) Set(key string, val interface{}) error {
+func (c *cache) Set(key string, val interface{}) error {
 	c.data.Store(key, val)
 	return nil
 }
 
-func (c cache) Del(key string) error {
+func (c *cache) Del(key string) error {
 	c.data.Delete(key)
 	return nil
 }

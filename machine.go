@@ -148,7 +148,8 @@ func (m *Machine) serve() {
 	}
 }
 
-// Wait blocks until all goroutines exit
+// Wait blocks until all goroutines exit.
+// This MUST be called after all routines are added via machine.Go in order for a machine instance to work as intended.
 func (m *Machine) Wait() {
 	for m.Current() > 0 {
 		for len(m.workQueue) > 0 {
