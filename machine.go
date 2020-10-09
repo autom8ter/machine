@@ -1,4 +1,4 @@
-//go:generate godocdown -o README.md
+//go:generate godocdown -template docs.template -o README.md
 
 package machine
 

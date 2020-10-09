@@ -1,7 +1,20 @@
-# machine
---
-    import "github.com/autom8ter/machine"
+# Machine
 
+     import "github.com/autom8ter/machine"
+
+Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+
+- throttled goroutines
+
+- self-cancellable goroutines with context
+
+- global-cancellable goroutines with context (see Cancel)
+
+- goroutines have IDs and optional tags for easy debugging(see Stats)
+
+- publish/subscribe to channels for passing messages between goroutines
+
+- global concurrency safe cache
 
 ## Usage
 
