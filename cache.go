@@ -7,10 +7,16 @@ import (
 
 var ErrNoExist = errors.New("machine: does not exit")
 
+// Cache is a concurrency safe cache implementation used by Machine.
+// A default sync.Map implementation is used if one isn't provided via WithCache
 type Cache interface {
+	// Get get a value by key and an error if one exists
 	Get(key string) (interface{}, error)
+	// Range executes the given function on the cache. If the function returns false, the iteration stops.
 	Range(fn func(k string, val interface{}) bool) error
+	// Set sets the key and value in the cache
 	Set(key string, val interface{}) error
+	// Del deletes the value by key from the map
 	Del(key string) error
 }
 
