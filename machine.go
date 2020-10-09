@@ -23,6 +23,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - publish/subscribe to channels for passing messages between goroutines
 
+- global concurrency safe cache
+
 */
 type Machine struct {
 	cache         Cache

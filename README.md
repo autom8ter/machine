@@ -87,6 +87,8 @@ errgroup.Group with extra bells & whistles:
 
 - publish/subscribe to channels for passing messages between goroutines
 
+- global concurrency safe cache
+
 #### func  New
 
 ```go
