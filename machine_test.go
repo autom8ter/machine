@@ -11,15 +11,9 @@ func runTest(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 	defer cancel()
 	m := machine.New(ctx,
-		machine.WithMaxRoutines(3),
+		machine.WithMaxRoutines(10),
 		machine.WithSubscribeChannelBuffer(10),
 	)
-	for x := 0; x < 100; x++ {
-		m.Go(func(routine machine.Routine) {
-			time.Sleep(50 * time.Millisecond)
-			return
-		})
-	}
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine machine.Routine) {
@@ -45,31 +39,36 @@ func runTest(t *testing.T) {
 	}, machine.WithTags("publish"))
 	var seenCron = false
 
-	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+	m.Go(func(routine machine.Routine) {
 		seenCron = true
 		t.Logf("cron1")
-	}), machine.WithTags("cron1"))
-	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+	},
+		machine.WithTags("cron1"),
+		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+	)
+	m.Go(func(routine machine.Routine) {
 		seenCron = true
 		t.Logf("cron2")
-	}), machine.WithTags("cron2"))
-	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+	},
+		machine.WithTags("cron2"),
+		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+	)
+	m.Go(func(routine machine.Routine) {
 		seenCron = true
 		t.Logf("cron3")
-	}), machine.WithTags("cron3"))
+	},
+		machine.WithTags("cron3"),
+		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+	)
+	m.Go(func(routine machine.Routine) {
+		panic("panic!")
+	})
 	m.Wait()
 	if m.Current() != 0 {
 		t.Fatalf("expected current to be zero, got: %v", m.Current())
 	}
 	if !seenCron {
 		t.Fatalf("expected to have received cron msg")
-	}
-	time.Sleep(1 * time.Second)
-	stats := m.Stats()
-	t.Logf("stats = %s\n", stats)
-	m.Wait()
-	if m.Current() != 0 {
-		t.Fatalf("expected current to be zero, got: %v", m.Current())
 	}
 	if !seen {
 		t.Fatalf("expected to have received subscription msg")

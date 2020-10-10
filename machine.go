@@ -4,8 +4,8 @@ package machine
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,13 +24,16 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - publish/subscribe to channels for passing messages between goroutines
 
+- middlewares for wrapping/decorating functions
+
+- panic recovery
+
 - global concurrency safe cache
 
 */
 type Machine struct {
 	cache         Cache
 	done          chan struct{}
-	middlewares   []Middleware
 	subChanLength int
 	cancel        func()
 	ctx           context.Context
@@ -59,7 +62,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
 		done:          make(chan struct{}, 1),
-		middlewares:   opts.middlewares,
 		subChanLength: opts.subChannelLength,
 		cancel:        cancel,
 		ctx:           ctx,
@@ -75,6 +77,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	return m
 }
 
+// Cache returns the machines Cache implementation
 func (m *Machine) Cache() Cache {
 	return m.cache
 }
@@ -115,8 +118,8 @@ func (m *Machine) serve() {
 		case <-m.done:
 			return
 		case w := <-m.workQueue:
-			if len(m.middlewares) > 0 {
-				for _, ware := range m.middlewares {
+			if len(w.opts.middlewares) > 0 {
+				for _, ware := range w.opts.middlewares {
 					w.fn = ware(w.fn)
 				}
 			}
@@ -149,6 +152,12 @@ func (m *Machine) serve() {
 			m.mu.Unlock()
 			atomic.AddInt64(&m.total, 1)
 			go func() {
+				defer func() {
+					r := recover()
+					if _, ok := r.(error); ok {
+						fmt.Println("machine: panic recovered")
+					}
+				}()
 				defer routine.done()
 				w.fn(routine)
 			}()
@@ -176,52 +185,19 @@ func (p *Machine) Cancel() {
 	})
 }
 
-/*
-Stats returns Goroutine information from the machine
-example:
-
-{
-            "count": 3,
-            "routines": {
-                "021851f5-d9ac-0f31-3a89-ddfc454c5f8f": {
-                    "id": "021851f5-d9ac-0f31-3a89-ddfc454c5f8f",
-                    "start": "2020-10-04T20:00:21.061072-06:00",
-                    "duration": 3001366067,
-                    "tags": [
-                        "stream-to-acme.com"
-                    ],
-                },
-                "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
-                    "id": "8afa3f85-b8a6-2708-caeb-bac880b5b89b",
-                    "start": "2020-10-04T20:00:21.011062-06:00",
-                    "duration": 3051375565,
-                    "tags": [
-                        "subscribe"
-                    ],
-                },
-                "93da5381-0164-4021-04e6-48b6226a1b78": {
-                    "id": "93da5381-0164-4021-04e6-48b6226a1b78",
-                    "start": "2020-10-04T20:00:21.01107-06:00",
-                    "duration": 3051367098,
-                    "tags": [
-                        "publish"
-                    ],
-                }
-     }
-}
-*/
+// Stats returns Goroutine information from the machine
 func (m *Machine) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	copied := map[string]RoutineStats{}
-	for k, v := range m.routines {
+	copied := []RoutineStats{}
+	for _, v := range m.routines {
 		if v != nil {
-			copied[strconv.Itoa(k)] = RoutineStats{
+			copied = append(copied, RoutineStats{
 				PID:      v.PID(),
 				Start:    v.Start(),
 				Duration: v.Duration(),
 				Tags:     v.Tags(),
-			}
+			})
 		}
 	}
 	return Stats{

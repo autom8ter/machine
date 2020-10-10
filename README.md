@@ -49,21 +49,6 @@ type Func func(routine Routine)
 Func is the function passed into machine.Go. The Routine is passed into this
 function at runtime.
 
-#### func  Every
-
-```go
-func Every(ticker *time.Ticker, fn Func) Func
-```
-Every executes the function every time the ticker ticks until the context
-cancels
-
-#### func  HourOfDay
-
-```go
-func HourOfDay(hourOfDay int, fn Func) Func
-```
-HourOfDay executes the function on a give hour of the day
-
 #### type GoOpt
 
 ```go
@@ -71,6 +56,13 @@ type GoOpt func(o *goOpts)
 ```
 
 GoOpt is a function that configures GoOpts
+
+#### func  WithMiddlewares
+
+```go
+func WithMiddlewares(middlewares ...Middleware) GoOpt
+```
+WithMiddlewares wraps the gived function with the input middlewares.
 
 #### func  WithPID
 
@@ -115,6 +107,10 @@ errgroup.Group with extra bells & whistles:
 
 - publish/subscribe to channels for passing messages between goroutines
 
+- middlewares for wrapping/decorating functions
+
+- panic recovery
+
 - global concurrency safe cache
 
 #### func  New
@@ -129,6 +125,7 @@ New Creates a new machine instance with the given root context & options
 ```go
 func (m *Machine) Cache() Cache
 ```
+Cache returns the machines Cache implementation
 
 #### func (*Machine) Cancel
 
@@ -160,39 +157,7 @@ returned by Wait.
 ```go
 func (m *Machine) Stats() Stats
 ```
-Stats returns Goroutine information from the machine example:
-
-{
-
-           "count": 3,
-           "routines": {
-               "021851f5-d9ac-0f31-3a89-ddfc454c5f8f": {
-                   "id": "021851f5-d9ac-0f31-3a89-ddfc454c5f8f",
-                   "start": "2020-10-04T20:00:21.061072-06:00",
-                   "duration": 3001366067,
-                   "tags": [
-                       "stream-to-acme.com"
-                   ],
-               },
-               "8afa3f85-b8a6-2708-caeb-bac880b5b89b": {
-                   "id": "8afa3f85-b8a6-2708-caeb-bac880b5b89b",
-                   "start": "2020-10-04T20:00:21.011062-06:00",
-                   "duration": 3051375565,
-                   "tags": [
-                       "subscribe"
-                   ],
-               },
-               "93da5381-0164-4021-04e6-48b6226a1b78": {
-                   "id": "93da5381-0164-4021-04e6-48b6226a1b78",
-                   "start": "2020-10-04T20:00:21.01107-06:00",
-                   "duration": 3051367098,
-                   "tags": [
-                       "publish"
-                   ],
-               }
-    }
-
-}
+Stats returns Goroutine information from the machine
 
 #### func (*Machine) Total
 
@@ -216,6 +181,14 @@ type Middleware func(fn Func) Func
 ```
 
 Middleware is a function that wraps/modifies the behavior of a machine.Func.
+
+#### func  Cron
+
+```go
+func Cron(ticker *time.Ticker) Middleware
+```
+Cron is a middleware that execute the function every time the ticker ticks until
+the goroutine's context cancels
 
 #### type Opt
 
@@ -241,14 +214,6 @@ func WithMaxRoutines(max int) Opt
 WithMaxRoutines throttles goroutines at the input number. It will panic if <=
 zero.
 
-#### func  WithMiddlewares
-
-```go
-func WithMiddlewares(middlewares ...Middleware) Opt
-```
-WithMiddlewares adds middlewares to the machine that will wrap every machine.Go
-Func that is executed by the machine instance.
-
 #### func  WithSubscribeChannelBuffer
 
 ```go
@@ -263,6 +228,8 @@ Routine subscribeTo
 type Routine interface {
 	// Context returns the goroutines unique context that may be used for cancellation
 	Context() context.Context
+	// Cancel cancels the context returned from Context()
+	Cancel()
 	// PID() is the goroutines unique process id
 	PID() int
 	// Tags() are the tags associated with the goroutine
@@ -299,8 +266,8 @@ RoutineStats holds information about a single goroutine
 
 ```go
 type Stats struct {
-	Count    int                     `json:"count"`
-	Routines map[string]RoutineStats `json:"routines"`
+	Count    int            `json:"count"`
+	Routines []RoutineStats `json:"routines"`
 }
 ```
 

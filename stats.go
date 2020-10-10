@@ -8,8 +8,8 @@ import (
 
 // Stats holds information about goroutines
 type Stats struct {
-	Count    int                     `json:"count"`
-	Routines map[string]RoutineStats `json:"routines"`
+	Count    int            `json:"count"`
+	Routines []RoutineStats `json:"routines"`
 }
 
 // String prints a pretty json string of the stats

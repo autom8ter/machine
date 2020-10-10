@@ -10,6 +10,8 @@ import (
 type Routine interface {
 	// Context returns the goroutines unique context that may be used for cancellation
 	Context() context.Context
+	// Cancel cancels the context returned from Context()
+	Cancel()
 	// PID() is the goroutines unique process id
 	PID() int
 	// Tags() are the tags associated with the goroutine
@@ -46,6 +48,10 @@ func (r *goRoutine) PID() int {
 
 func (r *goRoutine) Tags() []string {
 	return r.tags
+}
+
+func (r *goRoutine) Cancel() {
+	r.cancel()
 }
 
 func (r *goRoutine) Start() time.Time {

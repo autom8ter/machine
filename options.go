@@ -4,9 +4,10 @@ import "time"
 
 // goOpts holds options for creating a goroutine. It is configured via GoOpt functions.
 type goOpts struct {
-	id      int
-	tags    []string
-	timeout *time.Duration
+	id          int
+	tags        []string
+	timeout     *time.Duration
+	middlewares []Middleware
 }
 
 // GoOpt is a function that configures GoOpts
@@ -33,9 +34,15 @@ func WithTimeout(to time.Duration) GoOpt {
 	}
 }
 
+// WithMiddlewares wraps the gived function with the input middlewares.
+func WithMiddlewares(middlewares ...Middleware) GoOpt {
+	return func(o *goOpts) {
+		o.middlewares = append(o.middlewares, middlewares...)
+	}
+}
+
 // opts are options when creating a machine instance
 type option struct {
-	middlewares []Middleware
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines      int
 	subChannelLength int
@@ -59,13 +66,6 @@ func WithMaxRoutines(max int) Opt {
 func WithSubscribeChannelBuffer(length int) Opt {
 	return func(o *option) {
 		o.subChannelLength = length
-	}
-}
-
-// WithMiddlewares adds middlewares to the machine that will wrap every machine.Go Func that is executed by the machine instance.
-func WithMiddlewares(middlewares ...Middleware) Opt {
-	return func(o *option) {
-		o.middlewares = append(o.middlewares, middlewares...)
 	}
 }
 
