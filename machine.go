@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -40,6 +41,7 @@ type Machine struct {
 	closeOnce     sync.Once
 	subscriptions map[string]map[int]chan interface{}
 	subMu         sync.RWMutex
+	total         int64
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -82,6 +84,11 @@ func (p *Machine) Current() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return len(p.routines)
+}
+
+// Total returns total goroutines that have been executed by the machine
+func (p *Machine) Total() int {
+	return int(atomic.LoadInt64(&p.total))
 }
 
 // Go calls the given function in a new goroutine.
@@ -140,6 +147,7 @@ func (m *Machine) serve() {
 			m.mu.Lock()
 			m.routines[w.opts.id] = routine
 			m.mu.Unlock()
+			atomic.AddInt64(&m.total, 1)
 			go func() {
 				defer routine.done()
 				w.fn(routine)

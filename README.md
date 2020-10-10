@@ -194,6 +194,13 @@ Stats returns Goroutine information from the machine example:
 
 }
 
+#### func (*Machine) Total
+
+```go
+func (p *Machine) Total() int
+```
+Total returns total goroutines that have been executed by the machine
+
 #### func (*Machine) Wait
 
 ```go
