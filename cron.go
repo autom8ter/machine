@@ -1,13 +1,12 @@
-package cron
+package machine
 
 import (
-	"github.com/autom8ter/machine"
 	"time"
 )
 
 // Every executes the function every time the ticker ticks until the context cancels
-func Every(ticker *time.Ticker, fn machine.Func) machine.Func {
-	return func(routine machine.Routine) {
+func Every(ticker *time.Ticker, fn Func) Func {
+	return func(routine Routine) {
 		defer ticker.Stop()
 		for {
 			select {
@@ -21,8 +20,8 @@ func Every(ticker *time.Ticker, fn machine.Func) machine.Func {
 }
 
 // HourOfDay executes the function on a give hour of the day
-func HourOfDay(hourOfDay int, fn machine.Func) machine.Func {
-	return func(routine machine.Routine) {
+func HourOfDay(hourOfDay int, fn Func) Func {
+	return func(routine Routine) {
 		for {
 			select {
 			case <-routine.Context().Done():

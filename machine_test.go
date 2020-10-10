@@ -43,6 +43,27 @@ func runTest(t *testing.T) {
 			}
 		}
 	}, machine.WithTags("publish"))
+	var seenCron = false
+
+	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+		seenCron = true
+		t.Logf("cron1")
+	}), machine.WithTags("cron1"))
+	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+		seenCron = true
+		t.Logf("cron2")
+	}), machine.WithTags("cron2"))
+	m.Go(machine.Every(time.NewTicker(1*time.Second), func(routine machine.Routine) {
+		seenCron = true
+		t.Logf("cron3")
+	}), machine.WithTags("cron3"))
+	m.Wait()
+	if m.Current() != 0 {
+		t.Fatalf("expected current to be zero, got: %v", m.Current())
+	}
+	if !seenCron {
+		t.Fatalf("expected to have received cron msg")
+	}
 	time.Sleep(1 * time.Second)
 	stats := m.Stats()
 	t.Logf("stats = %s\n", stats)

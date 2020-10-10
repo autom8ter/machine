@@ -49,6 +49,21 @@ type Func func(routine Routine)
 Func is the function passed into machine.Go. The Routine is passed into this
 function at runtime.
 
+#### func  Every
+
+```go
+func Every(ticker *time.Ticker, fn Func) Func
+```
+Every executes the function every time the ticker ticks until the context
+cancels
+
+#### func  HourOfDay
+
+```go
+func HourOfDay(hourOfDay int, fn Func) Func
+```
+HourOfDay executes the function on a give hour of the day
+
 #### type GoOpt
 
 ```go
@@ -184,7 +199,8 @@ Stats returns Goroutine information from the machine example:
 ```go
 func (m *Machine) Wait()
 ```
-Wait blocks until all goroutines exit
+Wait blocks until all goroutines exit. This MUST be called after all routines
+are added via machine.Go in order for a machine instance to work as intended.
 
 #### type Middleware
 
@@ -252,6 +268,8 @@ type Routine interface {
 	Publish(channel string, obj interface{})
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
 	Subscribe(channel string, handler func(obj interface{}))
+	// Machine returns the underlying routine's machine instance
+	Machine() *Machine
 }
 ```
 

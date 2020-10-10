@@ -22,6 +22,8 @@ type Routine interface {
 	Publish(channel string, obj interface{})
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
 	Subscribe(channel string, handler func(obj interface{}))
+	// Machine returns the underlying routine's machine instance
+	Machine() *Machine
 }
 
 type goRoutine struct {
@@ -89,6 +91,10 @@ func (g *goRoutine) Subscribe(channel string, handler func(obj interface{})) {
 			handler(msg)
 		}
 	}
+}
+
+func (g *goRoutine) Machine() *Machine {
+	return g.machine
 }
 
 func (g *goRoutine) done() {
