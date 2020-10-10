@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// ErrNoExist is returned by the default Cache implementation if a record is not found
 var ErrNoExist = errors.New("machine: does not exit")
 
 // Cache is a concurrency safe cache implementation used by Machine.

@@ -25,6 +25,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 ```go
 var ErrNoExist = errors.New("machine: does not exit")
 ```
+ErrNoExist is returned by the default Cache implementation if a record is not
+found
 
 #### type Cache
 

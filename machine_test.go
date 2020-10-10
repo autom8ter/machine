@@ -14,6 +14,7 @@ func runTest(t *testing.T) {
 		machine.WithMaxRoutines(10),
 		machine.WithSubscribeChannelBuffer(10),
 	)
+	defer m.Close()
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine machine.Routine) {
@@ -93,6 +94,7 @@ Benchmark-8       860584              1366 ns/op             272 B/op          5
 func Benchmark(b *testing.B) {
 	b.ReportAllocs()
 	m := machine.New(context.Background(), machine.WithMaxRoutines(100))
+	defer m.Close()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine machine.Routine) {
 			return

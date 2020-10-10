@@ -11,23 +11,19 @@ import (
 	"time"
 )
 
-/*
-Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
-
-*/
+// Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 type Machine struct {
-	cache         Cache
-	done          chan struct{}
-	subChanLength int
-	cancel        func()
-	ctx           context.Context
-	workQueue     chan *work
-	mu            sync.RWMutex
-	routines      map[int]Routine
-	max           int
-	closeOnce     sync.Once
-	pubsub        PubSub
-	total         int64
+	cache     Cache
+	done      chan struct{}
+	cancel    func()
+	ctx       context.Context
+	workQueue chan *work
+	mu        sync.RWMutex
+	routines  map[int]Routine
+	max       int
+	closeOnce sync.Once
+	pubsub    PubSub
+	total     int64
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -50,18 +46,17 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
-		cache:         opts.cache,
-		done:          make(chan struct{}, 1),
-		subChanLength: opts.subChannelLength,
-		cancel:        cancel,
-		ctx:           ctx,
-		workQueue:     make(chan *work),
-		mu:            sync.RWMutex{},
-		routines:      map[int]Routine{},
-		max:           opts.maxRoutines,
-		closeOnce:     sync.Once{},
-		pubsub:        opts.pubsub,
-		total:         0,
+		cache:     opts.cache,
+		done:      make(chan struct{}, 1),
+		cancel:    cancel,
+		ctx:       ctx,
+		workQueue: make(chan *work),
+		mu:        sync.RWMutex{},
+		routines:  map[int]Routine{},
+		max:       opts.maxRoutines,
+		closeOnce: sync.Once{},
+		pubsub:    opts.pubsub,
+		total:     0,
 	}
 	go m.serve()
 	return m
