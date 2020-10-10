@@ -101,22 +101,6 @@ type Machine struct {
 Machine is a zero dependency runtime for managed goroutines. It is inspired by
 errgroup.Group with extra bells & whistles:
 
-- throttled goroutines
-
-- self-cancellable goroutines with context
-
-- global-cancellable goroutines with context (see Cancel)
-
-- goroutines have IDs and optional tags for easy debugging(see Stats)
-
-- publish/subscribe to channels for passing messages between goroutines
-
-- middlewares for wrapping/decorating functions
-
-- panic recovery
-
-- global concurrency safe cache
-
 #### func  New
 
 ```go
