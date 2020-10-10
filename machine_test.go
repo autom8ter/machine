@@ -41,24 +41,27 @@ func runTest(t *testing.T) {
 
 	m.Go(func(routine machine.Routine) {
 		seenCron = true
-		t.Logf("cron1")
 	},
 		machine.WithTags("cron1"),
-		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+		machine.WithMiddlewares(
+			machine.Cron(time.NewTicker(1*time.Second)),
+		),
 	)
 	m.Go(func(routine machine.Routine) {
 		seenCron = true
-		t.Logf("cron2")
 	},
 		machine.WithTags("cron2"),
-		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+		machine.WithMiddlewares(
+			machine.Cron(time.NewTicker(1*time.Second)),
+		),
 	)
 	m.Go(func(routine machine.Routine) {
 		seenCron = true
-		t.Logf("cron3")
 	},
 		machine.WithTags("cron3"),
-		machine.WithMiddlewares(machine.Cron(time.NewTicker(1*time.Second))),
+		machine.WithMiddlewares(
+			machine.Cron(time.NewTicker(1*time.Second)),
+		),
 	)
 	m.Go(func(routine machine.Routine) {
 		panic("panic!")

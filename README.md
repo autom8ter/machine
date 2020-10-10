@@ -186,6 +186,20 @@ type Middleware func(fn Func) Func
 
 Middleware is a function that wraps/modifies the behavior of a machine.Func.
 
+#### func  After
+
+```go
+func After(afterFunc func(routine Routine)) Middleware
+```
+After exectues the afterFunc after the main goroutine exits.
+
+#### func  Before
+
+```go
+func Before(beforeFunc func(routine Routine)) Middleware
+```
+Before exectues the beforeFunc before the main goroutine is executed.
+
 #### func  Cron
 
 ```go
@@ -193,6 +207,14 @@ func Cron(ticker *time.Ticker) Middleware
 ```
 Cron is a middleware that execute the function every time the ticker ticks until
 the goroutine's context cancels
+
+#### func  Decider
+
+```go
+func Decider(deciderFunc func(routine Routine) bool) Middleware
+```
+Decider exectues the deciderFunc before the main goroutine is executed. If it
+returns false, the goroutine won't be executed.
 
 #### type Opt
 
