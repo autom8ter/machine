@@ -26,8 +26,7 @@ type Machine struct {
 	routines      map[int]Routine
 	max           int
 	closeOnce     sync.Once
-	subscriptions map[string]map[int]chan interface{}
-	subMu         sync.RWMutex
+	pubsub        PubSub
 	total         int64
 }
 
@@ -43,6 +42,12 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.cache == nil {
 		opts.cache = &cache{data: &sync.Map{}}
 	}
+	if opts.pubsub == nil {
+		opts.pubsub = &pubSub{
+			subscriptions: map[string]map[int]chan interface{}{},
+			subMu:         sync.RWMutex{},
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
 		cache:         opts.cache,
@@ -55,8 +60,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		routines:      map[int]Routine{},
 		max:           opts.maxRoutines,
 		closeOnce:     sync.Once{},
-		subscriptions: map[string]map[int]chan interface{}{},
-		subMu:         sync.RWMutex{},
+		pubsub:        opts.pubsub,
 		total:         0,
 	}
 	go m.serve()
@@ -190,4 +194,17 @@ func (m *Machine) Stats() Stats {
 		Count:    len(copied),
 		Routines: copied,
 	}
+}
+
+func (m *Machine) Close() error {
+	var wrapped error
+	if err := m.cache.Close(); err != nil {
+		wrapped = err
+	}
+	if err := m.pubsub.Close(); err != nil {
+		if wrapped != nil {
+			wrapped = fmt.Errorf("%s %s", wrapped, err)
+		}
+	}
+	return wrapped
 }

@@ -47,6 +47,7 @@ type option struct {
 	maxRoutines      int
 	subChannelLength int
 	cache            Cache
+	pubsub           PubSub
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -73,5 +74,12 @@ func WithSubscribeChannelBuffer(length int) Opt {
 func WithCache(cache Cache) Opt {
 	return func(o *option) {
 		o.cache = cache
+	}
+}
+
+// WithPubSub sets the pubsub implementation for the machine instance. An inmemory implementation is used if none is provided.
+func WithPubSub(pubsub PubSub) Opt {
+	return func(o *option) {
+		o.pubsub = pubsub
 	}
 }

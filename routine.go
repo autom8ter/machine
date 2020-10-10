@@ -21,9 +21,9 @@ type Routine interface {
 	// Duration is the duration since the goroutine started
 	Duration() time.Duration
 	// Publish publishes the object to the given channel
-	Publish(channel string, obj interface{})
+	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
-	Subscribe(channel string, handler func(obj interface{}))
+	Subscribe(channel string, handler func(obj interface{})) error
 	// Machine returns the underlying routine's machine instance
 	Machine() *Machine
 }
@@ -62,41 +62,12 @@ func (r *goRoutine) Duration() time.Duration {
 	return time.Since(r.start)
 }
 
-func (g *goRoutine) Publish(channel string, obj interface{}) {
-	if g.machine.subscriptions[channel] == nil {
-		g.machine.subMu.Lock()
-		g.machine.subscriptions[channel] = map[int]chan interface{}{}
-		g.machine.subMu.Unlock()
-	}
-	channelSubscribers := g.machine.subscriptions[channel]
-	for _, input := range channelSubscribers {
-		input <- obj
-	}
+func (g *goRoutine) Publish(channel string, obj interface{}) error {
+	return g.machine.pubsub.Publish(channel, obj)
 }
 
-func (g *goRoutine) Subscribe(channel string, handler func(obj interface{})) {
-	ctx, cancel := context.WithCancel(g.ctx)
-	defer cancel()
-	g.machine.subMu.Lock()
-	ch := make(chan interface{}, g.machine.subChanLength)
-	if g.machine.subscriptions[channel] == nil {
-		g.machine.subscriptions[channel] = map[int]chan interface{}{}
-	}
-	g.machine.subscriptions[channel][g.id] = ch
-	g.machine.subMu.Unlock()
-	defer func() {
-		g.machine.subMu.Lock()
-		delete(g.machine.subscriptions[channel], g.id)
-		g.machine.subMu.Unlock()
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-g.machine.subscriptions[channel][g.id]:
-			handler(msg)
-		}
-	}
+func (g *goRoutine) Subscribe(channel string, handler func(obj interface{})) error {
+	return g.machine.pubsub.Subscribe(g.ctx, channel, handler)
 }
 
 func (g *goRoutine) Machine() *Machine {

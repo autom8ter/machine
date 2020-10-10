@@ -18,6 +18,8 @@ type Cache interface {
 	Set(key string, val interface{}) error
 	// Del deletes the value by key from the map
 	Del(key string) error
+	// Close closes the cache
+	Close() error
 }
 
 type cache struct {
@@ -46,5 +48,13 @@ func (c *cache) Set(key string, val interface{}) error {
 
 func (c *cache) Del(key string) error {
 	c.data.Delete(key)
+	return nil
+}
+
+func (c *cache) Close() error {
+	c.data.Range(func(key, value interface{}) bool {
+		c.data.Delete(key)
+		return true
+	})
 	return nil
 }

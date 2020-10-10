@@ -38,6 +38,8 @@ type Cache interface {
 	Set(key string, val interface{}) error
 	// Del deletes the value by key from the map
 	Del(key string) error
+	// Close closes the cache
+	Close() error
 }
 ```
 
@@ -121,6 +123,12 @@ Cache returns the machines Cache implementation
 func (p *Machine) Cancel()
 ```
 Cancel cancels every goroutines context
+
+#### func (*Machine) Close
+
+```go
+func (m *Machine) Close() error
+```
 
 #### func (*Machine) Current
 
@@ -224,6 +232,14 @@ func WithMaxRoutines(max int) Opt
 WithMaxRoutines throttles goroutines at the input number. It will panic if <=
 zero.
 
+#### func  WithPubSub
+
+```go
+func WithPubSub(pubsub PubSub) Opt
+```
+WithPubSub sets the pubsub implementation for the machine instance. An inmemory
+implementation is used if none is provided.
+
 #### func  WithSubscribeChannelBuffer
 
 ```go
@@ -231,6 +247,20 @@ func WithSubscribeChannelBuffer(length int) Opt
 ```
 WithSubscribeChannelBuffer sets the buffer length of the channel returned from a
 Routine subscribeTo
+
+#### type PubSub
+
+```go
+type PubSub interface {
+	// Publish publishes the object to the channel by name
+	Publish(channel string, obj interface{}) error
+	// Subscribe subscribes to the given channel
+	Subscribe(ctx context.Context, channel string, handler func(obj interface{})) error
+	Close() error
+}
+```
+
+PubSub is used to asynchronously pass messages between routines.
 
 #### type Routine
 
@@ -249,9 +279,9 @@ type Routine interface {
 	// Duration is the duration since the goroutine started
 	Duration() time.Duration
 	// Publish publishes the object to the given channel
-	Publish(channel string, obj interface{})
+	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
-	Subscribe(channel string, handler func(obj interface{}))
+	Subscribe(channel string, handler func(obj interface{})) error
 	// Machine returns the underlying routine's machine instance
 	Machine() *Machine
 }

@@ -76,6 +76,7 @@ func runTest(t *testing.T) {
 	if !seen {
 		t.Fatalf("expected to have received subscription msg")
 	}
+	t.Logf("total = %v", m.Total())
 }
 
 func Test(t *testing.T) {
