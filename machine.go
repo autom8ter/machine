@@ -61,6 +61,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
+		cache:         opts.cache,
 		done:          make(chan struct{}, 1),
 		subChanLength: opts.subChannelLength,
 		cancel:        cancel,
@@ -72,6 +73,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		closeOnce:     sync.Once{},
 		subscriptions: map[string]map[int]chan interface{}{},
 		subMu:         sync.RWMutex{},
+		total:         0,
 	}
 	go m.serve()
 	return m
