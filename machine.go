@@ -157,8 +157,6 @@ func (m *Machine) Wait() {
 		for len(m.workQueue) > 0 {
 		}
 	}
-	m.Cancel()
-	m.done <- struct{}{}
 }
 
 // Cancel cancels every goroutines context
@@ -192,6 +190,8 @@ func (m *Machine) Stats() Stats {
 }
 
 func (m *Machine) Close() error {
+	m.Cancel()
+	m.done <- struct{}{}
 	var wrapped error
 	if err := m.cache.Close(); err != nil {
 		wrapped = err

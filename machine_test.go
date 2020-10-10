@@ -24,20 +24,15 @@ func runTest(t *testing.T) {
 		})
 	}, machine.WithTags("subscribe"))
 	m.Go(func(routine machine.Routine) {
-		tick := time.NewTicker(1 * time.Second)
-		for {
-			select {
-			case <-routine.Context().Done():
-				tick.Stop()
-				return
-			case <-tick.C:
-				msg := "hey there bud!"
-				t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
-				routine.Publish(channelName, msg)
-				time.Sleep(1 * time.Second)
-			}
-		}
-	}, machine.WithTags("publish"))
+		msg := "hey there bud!"
+		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
+		routine.Publish(channelName, msg)
+	},
+		machine.WithTags("publish"),
+		machine.WithMiddlewares(
+			machine.Cron(time.NewTicker(1*time.Second)),
+		),
+	)
 	var seenCron = false
 
 	m.Go(func(routine machine.Routine) {
