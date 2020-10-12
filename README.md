@@ -16,8 +16,6 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - middlewares for wrapping/decorating functions
 
-- panic recovery
-
 - global concurrency safe cache
 
 - "Sub" machines for creating a dependency tree between groups of goroutines
@@ -176,6 +174,13 @@ func (m *Machine) Sub(opts ...Opt) *Machine
 Sub returns a nested Machine instance that is dependent on the parent machine's
 context.
 
+#### func (*Machine) Tags
+
+```go
+func (p *Machine) Tags() []string
+```
+Tags returns the machine's tags
+
 #### func (*Machine) Total
 
 ```go
@@ -229,6 +234,13 @@ func Decider(deciderFunc func(routine Routine) bool) Middleware
 Decider exectues the deciderFunc before the main goroutine is executed. If it
 returns false, the goroutine won't be executed.
 
+#### func  PanicRecover
+
+```go
+func PanicRecover() Middleware
+```
+PanicRecover wraps a goroutine with a middleware the recovers from panics.
+
 #### type Opt
 
 ```go
@@ -259,6 +271,15 @@ func WithMaxRoutines(max int) Opt
 WithMaxRoutines throttles goroutines at the input number. It will panic if <=
 zero.
 
+#### func  WithMiddlewares
+
+```go
+func WithMiddlewares(middlewares ...Middleware) Opt
+```
+WithMiddlewares wraps every goroutine function executed by the machine with the
+given middlewares. Middlewares can be added to individual goroutines with
+GoWithMiddlewares
+
 #### func  WithParent
 
 ```go
@@ -272,6 +293,13 @@ func WithPubSub(pubsub PubSub) Opt
 ```
 WithPubSub sets the pubsub implementation for the machine instance. An inmemory
 implementation is used if none is provided.
+
+#### func  WithTags
+
+```go
+func WithTags(tags []string) Opt
+```
+WithTags sets the machine instances tags
 
 #### type PubSub
 
@@ -331,6 +359,7 @@ RoutineStats holds information about a single goroutine
 
 ```go
 type Stats struct {
+	Tags           []string       `json:"tags"`
 	TotalRoutines  int            `json:"totalRoutines"`
 	ActiveRoutines int            `json:"activeRoutines"`
 	Routines       []RoutineStats `json:"routines"`

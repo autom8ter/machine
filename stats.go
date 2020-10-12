@@ -8,6 +8,7 @@ import (
 
 // Stats holds information about goroutines
 type Stats struct {
+	Tags           []string       `json:"tags"`
 	TotalRoutines  int            `json:"totalRoutines"`
 	ActiveRoutines int            `json:"activeRoutines"`
 	Routines       []RoutineStats `json:"routines"`

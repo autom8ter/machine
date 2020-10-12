@@ -4,7 +4,6 @@ package machine
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -13,21 +12,23 @@ import (
 
 // Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 type Machine struct {
-	parent    *Machine
-	children  []*Machine
-	childMu   sync.RWMutex
-	cache     Cache
-	done      chan struct{}
-	cancel    func()
-	ctx       context.Context
-	workQueue chan *work
-	mu        sync.RWMutex
-	routines  map[int]Routine
-	max       int
-	closeOnce sync.Once
-	doneOnce  sync.Once
-	pubsub    PubSub
-	total     int64
+	parent      *Machine
+	children    []*Machine
+	childMu     sync.RWMutex
+	dag         DAG
+	done        chan struct{}
+	cancel      func()
+	middlewares []Middleware
+	ctx         context.Context
+	workQueue   chan *work
+	mu          sync.RWMutex
+	routines    map[int]Routine
+	tags        []string
+	max         int
+	closeOnce   sync.Once
+	doneOnce    sync.Once
+	pubsub      PubSub
+	total       int64
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -39,8 +40,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.maxRoutines <= 0 {
 		opts.maxRoutines = 10000
 	}
-	if opts.cache == nil {
-		opts.cache = &cache{data: &sync.Map{}}
+	if opts.dag == nil {
+		opts.dag = newDag()
 	}
 	if opts.pubsub == nil {
 		opts.pubsub = &pubSub{
@@ -50,28 +51,30 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
-		parent:    opts.parent,
-		children:  opts.children,
-		cache:     opts.cache,
-		done:      make(chan struct{}, 1),
-		cancel:    cancel,
-		ctx:       ctx,
-		workQueue: make(chan *work),
-		mu:        sync.RWMutex{},
-		routines:  map[int]Routine{},
-		max:       opts.maxRoutines,
-		closeOnce: sync.Once{},
-		doneOnce:  sync.Once{},
-		pubsub:    opts.pubsub,
-		total:     0,
+		parent:      opts.parent,
+		children:    opts.children,
+		dag:         opts.dag,
+		done:        make(chan struct{}, 1),
+		middlewares: opts.middlewares,
+		cancel:      cancel,
+		ctx:         ctx,
+		workQueue:   make(chan *work),
+		mu:          sync.RWMutex{},
+		routines:    map[int]Routine{},
+		tags:        opts.tags,
+		max:         opts.maxRoutines,
+		closeOnce:   sync.Once{},
+		doneOnce:    sync.Once{},
+		pubsub:      opts.pubsub,
+		total:       0,
 	}
 	go m.serve()
 	return m
 }
 
-// Cache returns the machines Cache implementation
-func (m *Machine) Cache() Cache {
-	return m.cache
+// DAG returns the machines DAG implementation
+func (m *Machine) DAG() DAG {
+	return m.dag
 }
 
 // Active returns current active managed goroutine count
@@ -84,6 +87,11 @@ func (p *Machine) Active() int {
 // Total returns total goroutines that have been executed by the machine
 func (p *Machine) Total() int {
 	return int(atomic.LoadInt64(&p.total))
+}
+
+// Tags returns the machine's tags
+func (p *Machine) Tags() []string {
+	return p.tags
 }
 
 // Go calls the given function in a new goroutine.
@@ -109,10 +117,11 @@ func (m *Machine) serve() {
 		case <-m.done:
 			return
 		case w := <-m.workQueue:
-			if len(w.opts.middlewares) > 0 {
-				for _, ware := range w.opts.middlewares {
-					w.fn = ware(w.fn)
-				}
+			for _, ware := range w.opts.middlewares {
+				w.fn = ware(w.fn)
+			}
+			for _, ware := range m.middlewares {
+				w.fn = ware(w.fn)
 			}
 			for x := m.Active(); x >= m.max; x = m.Active() {
 
@@ -143,12 +152,6 @@ func (m *Machine) serve() {
 			m.mu.Unlock()
 			atomic.AddInt64(&m.total, 1)
 			go func() {
-				defer func() {
-					r := recover()
-					if _, ok := r.(error); ok {
-						fmt.Println("machine: panic recovered")
-					}
-				}()
 				defer routine.done()
 				w.fn(routine)
 			}()
@@ -195,6 +198,7 @@ func (m *Machine) Stats() *Stats {
 		}
 	}
 	return &Stats{
+		Tags:           m.tags,
 		TotalRoutines:  m.Total(),
 		ActiveRoutines: len(copied),
 		Routines:       copied,
@@ -208,7 +212,7 @@ func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
 		m.done <- struct{}{}
-		m.cache.Close()
+		m.dag.Close()
 		m.pubsub.Close()
 		for _, child := range m.children {
 			child.Close()

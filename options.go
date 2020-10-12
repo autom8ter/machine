@@ -47,8 +47,10 @@ type option struct {
 	maxRoutines int
 	parent      *Machine
 	children    []*Machine
-	cache       Cache
+	middlewares []Middleware
+	dag         DAG
 	pubsub      PubSub
+	tags        []string
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -64,10 +66,10 @@ func WithMaxRoutines(max int) Opt {
 	}
 }
 
-// WithCache sets the in memory, concurrency safe cache. If not set, a default sync.Map implementation is used.
-func WithCache(cache Cache) Opt {
+// WithDAG sets the directed acyclical graph instance. If not set, a default in memory implementation is used.
+func WithDAG(dag DAG) Opt {
 	return func(o *option) {
-		o.cache = cache
+		o.dag = dag
 	}
 }
 
@@ -87,5 +89,20 @@ func WithParent(parent *Machine) Opt {
 func WithChildren(children ...*Machine) Opt {
 	return func(o *option) {
 		o.children = append(o.children, children...)
+	}
+}
+
+// WithMiddlewares wraps every goroutine function executed by the machine with the given middlewares.
+// Middlewares can be added to individual goroutines with GoWithMiddlewares
+func WithMiddlewares(middlewares ...Middleware) Opt {
+	return func(o *option) {
+		o.middlewares = append(o.middlewares, middlewares...)
+	}
+}
+
+// WithTags sets the machine instances tags
+func WithTags(tags []string) Opt {
+	return func(o *option) {
+		o.tags = append(o.tags, tags...)
 	}
 }

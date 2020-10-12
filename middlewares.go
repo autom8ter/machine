@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -43,13 +44,29 @@ func Before(beforeFunc func(routine Routine)) Middleware {
 	}
 }
 
-// Decider exectues the deciderFunc before the main goroutine is executed. If it returns false, the goroutine won't be executed.
+// Decider exectues the deciderFunc before the main goroutine is executed.
+// If it returns false, the goroutine won't be executed.
 func Decider(deciderFunc func(routine Routine) bool) Middleware {
 	return func(fn Func) Func {
 		return func(routine Routine) {
 			if deciderFunc(routine) {
 				fn(routine)
 			}
+		}
+	}
+}
+
+// PanicRecover wraps a goroutine with a middleware the recovers from panics.
+func PanicRecover() Middleware {
+	return func(fn Func) Func {
+		return func(routine Routine) {
+			defer func() {
+				r := recover()
+				if _, ok := r.(error); ok {
+					fmt.Println("machine: panic recovered")
+				}
+			}()
+			fn(routine)
 		}
 	}
 }

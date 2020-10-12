@@ -12,6 +12,7 @@ func runTest(t *testing.T) {
 	defer cancel()
 	m := machine.New(ctx,
 		machine.WithMaxRoutines(10),
+		machine.WithMiddlewares(machine.PanicRecover()),
 	)
 	defer m.Close()
 	channelName := "acme.com"
