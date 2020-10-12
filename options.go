@@ -48,7 +48,6 @@ type option struct {
 	parent      *Machine
 	children    []*Machine
 	middlewares []Middleware
-	dag         DAG
 	pubsub      PubSub
 	tags        []string
 }
@@ -63,13 +62,6 @@ func WithMaxRoutines(max int) Opt {
 			panic("max routines must be greater than zero!")
 		}
 		o.maxRoutines = max
-	}
-}
-
-// WithDAG sets the directed acyclical graph instance. If not set, a default in memory implementation is used.
-func WithDAG(dag DAG) Opt {
-	return func(o *option) {
-		o.dag = dag
 	}
 }
 

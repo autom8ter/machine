@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func runTest(t *testing.T) {
+func runE2ETest(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 	defer cancel()
 	m := machine.New(ctx,
@@ -85,7 +85,7 @@ func runTest(t *testing.T) {
 }
 
 func Test(t *testing.T) {
-	runTest(t)
+	t.Run("e2e", runE2ETest)
 }
 
 /*

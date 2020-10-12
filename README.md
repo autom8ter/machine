@@ -16,37 +16,9 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - middlewares for wrapping/decorating functions
 
-- global concurrency safe cache
-
 - "Sub" machines for creating a dependency tree between groups of goroutines
 
 ## Usage
-
-```go
-var ErrNoExist = errors.New("machine: does not exit")
-```
-ErrNoExist is returned by the default Cache implementation if a record is not
-found
-
-#### type Cache
-
-```go
-type Cache interface {
-	// Get get a value by key and an error if one exists
-	Get(key string) (interface{}, error)
-	// Range executes the given function on the cache. If the function returns false, the iteration stops.
-	Range(fn func(k string, val interface{}) bool) error
-	// Set sets the key and value in the cache
-	Set(key string, val interface{}) error
-	// Del deletes the value by key from the map
-	Del(key string) error
-	// Close closes the cache
-	Close()
-}
-```
-
-Cache is a concurrency safe cache implementation used by Machine. A default
-sync.Map implementation is used if one isn't provided via WithCache
 
 #### type Func
 
@@ -118,13 +90,6 @@ New Creates a new machine instance with the given root context & options
 func (p *Machine) Active() int
 ```
 Active returns current active managed goroutine count
-
-#### func (*Machine) Cache
-
-```go
-func (m *Machine) Cache() Cache
-```
-Cache returns the machines Cache implementation
 
 #### func (*Machine) Cancel
 
@@ -248,14 +213,6 @@ type Opt func(o *option)
 ```
 
 Opt is a single option when creating a machine instance with New
-
-#### func  WithCache
-
-```go
-func WithCache(cache Cache) Opt
-```
-WithCache sets the in memory, concurrency safe cache. If not set, a default
-sync.Map implementation is used.
 
 #### func  WithChildren
 

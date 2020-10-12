@@ -15,7 +15,6 @@ type Machine struct {
 	parent      *Machine
 	children    []*Machine
 	childMu     sync.RWMutex
-	dag         DAG
 	done        chan struct{}
 	cancel      func()
 	middlewares []Middleware
@@ -40,9 +39,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.maxRoutines <= 0 {
 		opts.maxRoutines = 10000
 	}
-	if opts.dag == nil {
-		opts.dag = newDag()
-	}
 	if opts.pubsub == nil {
 		opts.pubsub = &pubSub{
 			subscriptions: map[string]map[int]chan interface{}{},
@@ -53,7 +49,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	m := &Machine{
 		parent:      opts.parent,
 		children:    opts.children,
-		dag:         opts.dag,
 		done:        make(chan struct{}, 1),
 		middlewares: opts.middlewares,
 		cancel:      cancel,
@@ -70,11 +65,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	go m.serve()
 	return m
-}
-
-// DAG returns the machines DAG implementation
-func (m *Machine) DAG() DAG {
-	return m.dag
 }
 
 // Active returns current active managed goroutine count
@@ -212,7 +202,6 @@ func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
 		m.done <- struct{}{}
-		m.dag.Close()
 		m.pubsub.Close()
 		for _, child := range m.children {
 			child.Close()
