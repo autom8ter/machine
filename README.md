@@ -20,6 +20,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - global concurrency safe cache
 
+- "Sub" machines for creating a dependency tree between groups of goroutines
+
 ## Usage
 
 ```go
