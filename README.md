@@ -41,7 +41,7 @@ type Cache interface {
 	// Del deletes the value by key from the map
 	Del(key string) error
 	// Close closes the cache
-	Close() error
+	Close()
 }
 ```
 
@@ -129,8 +129,9 @@ Cancel cancels every goroutines context
 #### func (*Machine) Close
 
 ```go
-func (m *Machine) Close() error
+func (m *Machine) Close()
 ```
+Close cleans up the machine instance and all of it's children.
 
 #### func (*Machine) Current
 
@@ -150,12 +151,26 @@ The first call to return a non-nil error who's cause is machine.Cancel cancels
 the context of every job. All errors that are not of type machine.Cancel will be
 returned by Wait.
 
+#### func (*Machine) Parent
+
+```go
+func (m *Machine) Parent() *Machine
+```
+Parent returns the parent Machine instance if it exists.
+
 #### func (*Machine) Stats
 
 ```go
-func (m *Machine) Stats() Stats
+func (m *Machine) Stats() *Stats
 ```
 Stats returns Goroutine information from the machine
+
+#### func (*Machine) Sub
+
+```go
+func (m *Machine) Sub(opts ...Opt) *Machine
+```
+Sub returns a nested Machine instance.
 
 #### func (*Machine) Total
 
@@ -169,8 +184,8 @@ Total returns total goroutines that have been executed by the machine
 ```go
 func (m *Machine) Wait()
 ```
-Wait blocks until all goroutines exit. This MUST be called after all routines
-are added via machine.Go in order for a machine instance to work as intended.
+Wait blocks until total active goroutine count reaches zero for the instance and
+all of it's children.
 
 #### type Middleware
 
@@ -226,6 +241,12 @@ func WithCache(cache Cache) Opt
 WithCache sets the in memory, concurrency safe cache. If not set, a default
 sync.Map implementation is used.
 
+#### func  WithChildren
+
+```go
+func WithChildren(children ...*Machine) Opt
+```
+
 #### func  WithMaxRoutines
 
 ```go
@@ -233,6 +254,12 @@ func WithMaxRoutines(max int) Opt
 ```
 WithMaxRoutines throttles goroutines at the input number. It will panic if <=
 zero.
+
+#### func  WithParent
+
+```go
+func WithParent(parent *Machine) Opt
+```
 
 #### func  WithPubSub
 
@@ -242,14 +269,6 @@ func WithPubSub(pubsub PubSub) Opt
 WithPubSub sets the pubsub implementation for the machine instance. An inmemory
 implementation is used if none is provided.
 
-#### func  WithSubscribeChannelBuffer
-
-```go
-func WithSubscribeChannelBuffer(length int) Opt
-```
-WithSubscribeChannelBuffer sets the buffer length of the channel returned from a
-Routine subscribeTo
-
 #### type PubSub
 
 ```go
@@ -258,7 +277,7 @@ type PubSub interface {
 	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to the given channel
 	Subscribe(ctx context.Context, channel string, handler func(obj interface{})) error
-	Close() error
+	Close()
 }
 ```
 
@@ -308,8 +327,10 @@ RoutineStats holds information about a single goroutine
 
 ```go
 type Stats struct {
-	Count    int            `json:"count"`
-	Routines []RoutineStats `json:"routines"`
+	TotalRoutines int            `json:"totalRoutines"`
+	Routines      []RoutineStats `json:"routines"`
+	TotalChildren int            `json:"totalChildren"`
+	HasParent     bool           `json:"hasParent"`
 }
 ```
 

@@ -8,8 +8,10 @@ import (
 
 // Stats holds information about goroutines
 type Stats struct {
-	Count    int            `json:"count"`
-	Routines []RoutineStats `json:"routines"`
+	TotalRoutines int            `json:"totalRoutines"`
+	Routines      []RoutineStats `json:"routines"`
+	TotalChildren int            `json:"totalChildren"`
+	HasParent     bool           `json:"hasParent"`
 }
 
 // String prints a pretty json string of the stats

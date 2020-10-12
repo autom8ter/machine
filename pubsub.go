@@ -12,7 +12,7 @@ type PubSub interface {
 	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to the given channel
 	Subscribe(ctx context.Context, channel string, handler func(obj interface{})) error
-	Close() error
+	Close()
 }
 
 type pubSub struct {
@@ -59,11 +59,10 @@ func (p *pubSub) Publish(channel string, obj interface{}) error {
 	return nil
 }
 
-func (p *pubSub) Close() error {
+func (p *pubSub) Close() {
 	p.subMu.Lock()
 	defer p.subMu.Unlock()
 	for k, _ := range p.subscriptions {
 		delete(p.subscriptions, k)
 	}
-	return nil
 }

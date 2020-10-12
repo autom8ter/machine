@@ -30,6 +30,51 @@ var (
 	}
 )
 
+type chat struct {
+	machine *machine.Machine
+}
+
+func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
+	c.machine.Go(func(routine machine.Routine) {
+		for {
+			select {
+			case <-routine.Context().Done():
+				return
+			default:
+				incoming, err := server.Recv()
+				if err != nil {
+					errPrint(err)
+					continue
+				}
+				if err := routine.Publish(incoming.Channel, incoming.Text); err != nil {
+					errPrint(err)
+					continue
+				}
+			}
+		}
+	})
+	c.machine.Go(func(routine machine.Routine) {
+		for {
+			select {
+			case <-routine.Context().Done():
+				return
+			default:
+				routine.Subscribe("default", func(obj interface{}) {
+
+				})
+				if err := server.Send(&chatpb.ChatResponse{
+					Channel:              "default",
+					Text:                 "",
+				}); err != nil {
+					errPrint(err)
+					continue
+				}
+
+			}
+		}
+	})
+}
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

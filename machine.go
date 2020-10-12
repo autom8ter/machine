@@ -13,6 +13,9 @@ import (
 
 // Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 type Machine struct {
+	parent    *Machine
+	children  []*Machine
+	childMu   sync.RWMutex
 	cache     Cache
 	done      chan struct{}
 	cancel    func()
@@ -22,6 +25,7 @@ type Machine struct {
 	routines  map[int]Routine
 	max       int
 	closeOnce sync.Once
+	doneOnce  sync.Once
 	pubsub    PubSub
 	total     int64
 }
@@ -46,6 +50,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	m := &Machine{
+		parent:    opts.parent,
+		children:  opts.children,
 		cache:     opts.cache,
 		done:      make(chan struct{}, 1),
 		cancel:    cancel,
@@ -55,6 +61,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		routines:  map[int]Routine{},
 		max:       opts.maxRoutines,
 		closeOnce: sync.Once{},
+		doneOnce:  sync.Once{},
 		pubsub:    opts.pubsub,
 		total:     0,
 	}
@@ -71,7 +78,11 @@ func (m *Machine) Cache() Cache {
 func (p *Machine) Current() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return len(p.routines)
+	current := len(p.routines)
+	for _, child := range p.children {
+		current += child.Current()
+	}
+	return current
 }
 
 // Total returns total goroutines that have been executed by the machine
@@ -96,7 +107,6 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 	}
 }
 
-// serve waites for all goroutines to exit
 func (m *Machine) serve() {
 	for {
 		select {
@@ -150,8 +160,7 @@ func (m *Machine) serve() {
 	}
 }
 
-// Wait blocks until all goroutines exit.
-// This MUST be called after all routines are added via machine.Go in order for a machine instance to work as intended.
+// Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.
 func (m *Machine) Wait() {
 	for m.Current() > 0 {
 		for len(m.workQueue) > 0 {
@@ -164,12 +173,15 @@ func (p *Machine) Cancel() {
 	p.closeOnce.Do(func() {
 		if p.cancel != nil {
 			p.cancel()
+			for _, child := range p.children {
+				child.Close()
+			}
 		}
 	})
 }
 
 // Stats returns Goroutine information from the machine
-func (m *Machine) Stats() Stats {
+func (m *Machine) Stats() *Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	copied := []RoutineStats{}
@@ -183,23 +195,38 @@ func (m *Machine) Stats() Stats {
 			})
 		}
 	}
-	return Stats{
-		Count:    len(copied),
-		Routines: copied,
+	return &Stats{
+		TotalRoutines: len(copied),
+		Routines:      copied,
+		TotalChildren: len(m.children),
+		HasParent:     m.parent != nil,
 	}
 }
 
-func (m *Machine) Close() error {
-	m.Cancel()
-	m.done <- struct{}{}
-	var wrapped error
-	if err := m.cache.Close(); err != nil {
-		wrapped = err
-	}
-	if err := m.pubsub.Close(); err != nil {
-		if wrapped != nil {
-			wrapped = fmt.Errorf("%s %s", wrapped, err)
+// Close cleans up the machine instance and all of it's children.
+func (m *Machine) Close() {
+	m.doneOnce.Do(func() {
+		m.Cancel()
+		m.done <- struct{}{}
+		m.cache.Close()
+		m.pubsub.Close()
+		for _, child := range m.children {
+			child.Close()
 		}
-	}
-	return wrapped
+	})
+}
+
+// Sub returns a nested Machine instance.
+func (m *Machine) Sub(opts ...Opt) *Machine {
+	opts = append(opts, WithParent(m))
+	sub := New(m.ctx, opts...)
+	m.childMu.Lock()
+	m.children = append(m.children, sub)
+	m.childMu.Unlock()
+	return sub
+}
+
+// Parent returns the parent Machine instance if it exists.
+func (m *Machine) Parent() *Machine {
+	return m.parent
 }

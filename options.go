@@ -44,10 +44,11 @@ func WithMiddlewares(middlewares ...Middleware) GoOpt {
 // opts are options when creating a machine instance
 type option struct {
 	// MaxRoutines throttles goroutines at the given count
-	maxRoutines      int
-	subChannelLength int
-	cache            Cache
-	pubsub           PubSub
+	maxRoutines int
+	parent      *Machine
+	children    []*Machine
+	cache       Cache
+	pubsub      PubSub
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -63,13 +64,6 @@ func WithMaxRoutines(max int) Opt {
 	}
 }
 
-// WithSubscribeChannelBuffer sets the buffer length of the channel returned from a Routine subscribeTo
-func WithSubscribeChannelBuffer(length int) Opt {
-	return func(o *option) {
-		o.subChannelLength = length
-	}
-}
-
 // WithCache sets the in memory, concurrency safe cache. If not set, a default sync.Map implementation is used.
 func WithCache(cache Cache) Opt {
 	return func(o *option) {
@@ -81,5 +75,17 @@ func WithCache(cache Cache) Opt {
 func WithPubSub(pubsub PubSub) Opt {
 	return func(o *option) {
 		o.pubsub = pubsub
+	}
+}
+
+func WithParent(parent *Machine) Opt {
+	return func(o *option) {
+		o.parent = parent
+	}
+}
+
+func WithChildren(children ...*Machine) Opt {
+	return func(o *option) {
+		o.children = append(o.children, children...)
 	}
 }

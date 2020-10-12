@@ -12,7 +12,6 @@ func runTest(t *testing.T) {
 	defer cancel()
 	m := machine.New(ctx,
 		machine.WithMaxRoutines(10),
-		machine.WithSubscribeChannelBuffer(10),
 	)
 	defer m.Close()
 	channelName := "acme.com"
@@ -25,7 +24,7 @@ func runTest(t *testing.T) {
 	}, machine.WithTags("subscribe"))
 	m.Go(func(routine machine.Routine) {
 		msg := "hey there bud!"
-		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, m.Stats().String())
+		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
 		routine.Publish(channelName, msg)
 	},
 		machine.WithTags("publish"),
@@ -33,32 +32,41 @@ func runTest(t *testing.T) {
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
+	m2 := m.Sub(machine.WithMaxRoutines(3))
 	var seenCron = false
 
-	m.Go(func(routine machine.Routine) {
+	m2.Go(func(routine machine.Routine) {
 		seenCron = true
+		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
 		machine.WithTags("cron1"),
+		machine.WithTimeout(3*time.Second),
 		machine.WithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
-	m.Go(func(routine machine.Routine) {
+	m2.Go(func(routine machine.Routine) {
 		seenCron = true
+		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
 		machine.WithTags("cron2"),
+		machine.WithTimeout(3*time.Second),
 		machine.WithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
-	m.Go(func(routine machine.Routine) {
+	m2.Go(func(routine machine.Routine) {
 		seenCron = true
+		t.Logf("cron3 stats= %s\n", routine.Machine().Stats().String())
 	},
 		machine.WithTags("cron3"),
+		machine.WithTimeout(3*time.Second),
 		machine.WithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
+	m2.Wait()
+	t.Logf("here")
 	m.Go(func(routine machine.Routine) {
 		panic("panic!")
 	})
