@@ -74,15 +74,11 @@ func (m *Machine) Cache() Cache {
 	return m.cache
 }
 
-// Current returns current managed goroutine count
-func (p *Machine) Current() int {
+// Active returns current active managed goroutine count
+func (p *Machine) Active() int {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	current := len(p.routines)
-	for _, child := range p.children {
-		current += child.Current()
-	}
-	return current
+	return len(p.routines)
 }
 
 // Total returns total goroutines that have been executed by the machine
@@ -118,7 +114,7 @@ func (m *Machine) serve() {
 					w.fn = ware(w.fn)
 				}
 			}
-			for x := m.Current(); x >= m.max; x = m.Current() {
+			for x := m.Active(); x >= m.max; x = m.Active() {
 
 			}
 			if w.opts.id == 0 {
@@ -162,13 +158,16 @@ func (m *Machine) serve() {
 
 // Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.
 func (m *Machine) Wait() {
-	for m.Current() > 0 {
+	for m.Active() > 0 {
 		for len(m.workQueue) > 0 {
+		}
+		for _, child := range m.children {
+			child.Wait()
 		}
 	}
 }
 
-// Cancel cancels every goroutines context
+// Cancel cancels every goroutines context within the machine instance & it's children
 func (p *Machine) Cancel() {
 	p.closeOnce.Do(func() {
 		if p.cancel != nil {
@@ -196,14 +195,15 @@ func (m *Machine) Stats() *Stats {
 		}
 	}
 	return &Stats{
-		TotalRoutines: len(copied),
-		Routines:      copied,
-		TotalChildren: len(m.children),
-		HasParent:     m.parent != nil,
+		TotalRoutines:  m.Total(),
+		ActiveRoutines: len(copied),
+		Routines:       copied,
+		TotalChildren:  len(m.children),
+		HasParent:      m.parent != nil,
 	}
 }
 
-// Close cleans up the machine instance and all of it's children.
+// Close completely closes the machine instance & all of it's children
 func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
@@ -216,7 +216,7 @@ func (m *Machine) Close() {
 	})
 }
 
-// Sub returns a nested Machine instance.
+// Sub returns a nested Machine instance that is dependent on the parent machine's context.
 func (m *Machine) Sub(opts ...Opt) *Machine {
 	opts = append(opts, WithParent(m))
 	sub := New(m.ctx, opts...)
@@ -226,7 +226,7 @@ func (m *Machine) Sub(opts ...Opt) *Machine {
 	return sub
 }
 
-// Parent returns the parent Machine instance if it exists.
+// Parent returns the parent Machine instance if it exists and nil if not.
 func (m *Machine) Parent() *Machine {
 	return m.parent
 }

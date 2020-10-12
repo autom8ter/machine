@@ -65,35 +65,35 @@ type GoOpt func(o *goOpts)
 
 GoOpt is a function that configures GoOpts
 
-#### func  WithMiddlewares
+#### func  GoWithMiddlewares
 
 ```go
-func WithMiddlewares(middlewares ...Middleware) GoOpt
+func GoWithMiddlewares(middlewares ...Middleware) GoOpt
 ```
-WithMiddlewares wraps the gived function with the input middlewares.
+GoWithMiddlewares wraps the gived function with the input middlewares.
 
-#### func  WithPID
+#### func  GoWithPID
 
 ```go
-func WithPID(id int) GoOpt
+func GoWithPID(id int) GoOpt
 ```
-WithPID is a GoOpt that sets/overrides the process ID of the Routine. A random
+GoWithPID is a GoOpt that sets/overrides the process ID of the Routine. A random
 id is assigned if this option is not used.
 
-#### func  WithTags
+#### func  GoWithTags
 
 ```go
-func WithTags(tags ...string) GoOpt
+func GoWithTags(tags ...string) GoOpt
 ```
-WithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
+GoWithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
 
-#### func  WithTimeout
+#### func  GoWithTimeout
 
 ```go
-func WithTimeout(to time.Duration) GoOpt
+func GoWithTimeout(to time.Duration) GoOpt
 ```
-WithTimeout is a GoOpt that creates the Routine's context with the given timeout
-value
+GoWithTimeout is a GoOpt that creates the Routine's context with the given
+timeout value
 
 #### type Machine
 
@@ -112,6 +112,13 @@ func New(ctx context.Context, options ...Opt) *Machine
 ```
 New Creates a new machine instance with the given root context & options
 
+#### func (*Machine) Active
+
+```go
+func (p *Machine) Active() int
+```
+Active returns current active managed goroutine count
+
 #### func (*Machine) Cache
 
 ```go
@@ -124,21 +131,15 @@ Cache returns the machines Cache implementation
 ```go
 func (p *Machine) Cancel()
 ```
-Cancel cancels every goroutines context
+Cancel cancels every goroutines context within the machine instance & it's
+children
 
 #### func (*Machine) Close
 
 ```go
 func (m *Machine) Close()
 ```
-Close cleans up the machine instance and all of it's children.
-
-#### func (*Machine) Current
-
-```go
-func (p *Machine) Current() int
-```
-Current returns current managed goroutine count
+Close completely closes the machine instance & all of it's children
 
 #### func (*Machine) Go
 
@@ -156,7 +157,7 @@ returned by Wait.
 ```go
 func (m *Machine) Parent() *Machine
 ```
-Parent returns the parent Machine instance if it exists.
+Parent returns the parent Machine instance if it exists and nil if not.
 
 #### func (*Machine) Stats
 
@@ -170,7 +171,8 @@ Stats returns Goroutine information from the machine
 ```go
 func (m *Machine) Sub(opts ...Opt) *Machine
 ```
-Sub returns a nested Machine instance.
+Sub returns a nested Machine instance that is dependent on the parent machine's
+context.
 
 #### func (*Machine) Total
 
@@ -327,10 +329,11 @@ RoutineStats holds information about a single goroutine
 
 ```go
 type Stats struct {
-	TotalRoutines int            `json:"totalRoutines"`
-	Routines      []RoutineStats `json:"routines"`
-	TotalChildren int            `json:"totalChildren"`
-	HasParent     bool           `json:"hasParent"`
+	TotalRoutines  int            `json:"totalRoutines"`
+	ActiveRoutines int            `json:"activeRoutines"`
+	Routines       []RoutineStats `json:"routines"`
+	TotalChildren  int            `json:"totalChildren"`
+	HasParent      bool           `json:"hasParent"`
 }
 ```
 

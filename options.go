@@ -13,29 +13,29 @@ type goOpts struct {
 // GoOpt is a function that configures GoOpts
 type GoOpt func(o *goOpts)
 
-// WithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
-func WithTags(tags ...string) GoOpt {
+// GoWithTags is a GoOpt that adds an array of strings as "tags" to the Routine.
+func GoWithTags(tags ...string) GoOpt {
 	return func(o *goOpts) {
 		o.tags = append(o.tags, tags...)
 	}
 }
 
-// WithPID is a GoOpt that sets/overrides the process ID of the Routine. A random id is assigned if this option is not used.
-func WithPID(id int) GoOpt {
+// GoWithPID is a GoOpt that sets/overrides the process ID of the Routine. A random id is assigned if this option is not used.
+func GoWithPID(id int) GoOpt {
 	return func(o *goOpts) {
 		o.id = id
 	}
 }
 
-// WithTimeout is a GoOpt that creates the Routine's context with the given timeout value
-func WithTimeout(to time.Duration) GoOpt {
+// GoWithTimeout is a GoOpt that creates the Routine's context with the given timeout value
+func GoWithTimeout(to time.Duration) GoOpt {
 	return func(o *goOpts) {
 		o.timeout = &to
 	}
 }
 
-// WithMiddlewares wraps the gived function with the input middlewares.
-func WithMiddlewares(middlewares ...Middleware) GoOpt {
+// GoWithMiddlewares wraps the gived function with the input middlewares.
+func GoWithMiddlewares(middlewares ...Middleware) GoOpt {
 	return func(o *goOpts) {
 		o.middlewares = append(o.middlewares, middlewares...)
 	}

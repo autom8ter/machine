@@ -21,14 +21,14 @@ func runTest(t *testing.T) {
 			seen = true
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
 		})
-	}, machine.WithTags("subscribe"))
+	}, machine.GoWithTags("subscribe"))
 	m.Go(func(routine machine.Routine) {
 		msg := "hey there bud!"
 		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
 		routine.Publish(channelName, msg)
 	},
-		machine.WithTags("publish"),
-		machine.WithMiddlewares(
+		machine.GoWithTags("publish"),
+		machine.GoWithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
@@ -39,9 +39,9 @@ func runTest(t *testing.T) {
 		seenCron = true
 		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
-		machine.WithTags("cron1"),
-		machine.WithTimeout(3*time.Second),
-		machine.WithMiddlewares(
+		machine.GoWithTags("cron1"),
+		machine.GoWithTimeout(3*time.Second),
+		machine.GoWithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
@@ -49,9 +49,9 @@ func runTest(t *testing.T) {
 		seenCron = true
 		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
-		machine.WithTags("cron2"),
-		machine.WithTimeout(3*time.Second),
-		machine.WithMiddlewares(
+		machine.GoWithTags("cron2"),
+		machine.GoWithTimeout(3*time.Second),
+		machine.GoWithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
@@ -59,9 +59,9 @@ func runTest(t *testing.T) {
 		seenCron = true
 		t.Logf("cron3 stats= %s\n", routine.Machine().Stats().String())
 	},
-		machine.WithTags("cron3"),
-		machine.WithTimeout(3*time.Second),
-		machine.WithMiddlewares(
+		machine.GoWithTags("cron3"),
+		machine.GoWithTimeout(3*time.Second),
+		machine.GoWithMiddlewares(
 			machine.Cron(time.NewTicker(1*time.Second)),
 		),
 	)
@@ -71,8 +71,8 @@ func runTest(t *testing.T) {
 		panic("panic!")
 	})
 	m.Wait()
-	if m.Current() != 0 {
-		t.Fatalf("expected current to be zero, got: %v", m.Current())
+	if m.Active() != 0 {
+		t.Fatalf("expected active to be zero, got: %v", m.Active())
 	}
 	if !seenCron {
 		t.Fatalf("expected to have received cron msg")
@@ -96,7 +96,7 @@ Benchmark-8       860584              1366 ns/op             272 B/op          5
 */
 func Benchmark(b *testing.B) {
 	b.ReportAllocs()
-	m := machine.New(context.Background(), machine.WithMaxRoutines(100))
+	m := machine.New(context.Background(), machine.WithMaxRoutines(3))
 	defer m.Close()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine machine.Routine) {
