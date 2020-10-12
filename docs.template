@@ -1,4 +1,4 @@
-# Machine
+# Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine?status.svg)](https://godoc.org/github.com/autom8ter/machine)
 
      import "github.com/autom8ter/machine"
 
