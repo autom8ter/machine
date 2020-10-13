@@ -8,9 +8,8 @@ Higher level examples using the machine library.
 
 - clients join a channel with a single request that starts streaming from os.Stdin -> chat server
 - messages sent to a channel are broadcasted to all client's that are listening to that channel
-
-[API](chat/chat.proto)
-[Implementation](chat/chat.go)
+- [Protobuf API](chat/chat.proto)
+- [Implementation](chat/chat.go)
 
 ### Start Server
 
