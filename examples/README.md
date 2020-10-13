@@ -36,6 +36,8 @@ subscribed to the accounting channel.
 
 ## TCP Reverse Proxy
 
+- [Implementation](reverse-proxy/main.go)
+
 - (~ 150 lines)
 - straight up transparent reverse proxy
 - zero dependencies
