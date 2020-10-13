@@ -9,138 +9,80 @@ import (
 	chatpb "github.com/autom8ter/machine/examples/gen/go/example/chat"
 	"github.com/golang/protobuf/jsonpb"
 	"google.golang.org/grpc"
-	"net"
+	"google.golang.org/grpc/metadata"
+	"io"
 	"os"
 	"strings"
 )
 
 func init() {
-	flag.BoolVar(&serve, "serve", false, "start server")
+	flag.StringVar(&channel, "channel", "default", "channel to chat in")
 	flag.StringVar(&target, "target", "localhost:9000", "target to dial when running client")
-	flag.IntVar(&port, "port", 9000, "port to serve on")
+	flag.StringVar(&token, "token", "", "authorization token to send")
 	flag.Parse()
 }
 
 var (
-	serve   bool
 	target  string
-	port    int
+	token   string
+	channel string
 	encoder = &jsonpb.Marshaler{
 		Indent: "    ",
 	}
 )
 
-type chat struct {
-	machine *machine.Machine
-}
-
-func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
-	c.machine.Go(func(routine machine.Routine) {
-		for {
-			select {
-			case <-routine.Context().Done():
-				return
-			default:
-				incoming, err := server.Recv()
-				if err != nil {
-					errPrint(err)
-					continue
-				}
-				if err := routine.Publish(incoming.Channel, incoming.Text); err != nil {
-					errPrint(err)
-					continue
-				}
-			}
-		}
-	})
-	c.machine.Go(func(routine machine.Routine) {
-		for {
-			select {
-			case <-routine.Context().Done():
-				return
-			default:
-				routine.Subscribe("default", func(obj interface{}) {
-
-				})
-				if err := server.Send(&chatpb.ChatResponse{
-					Channel:              "default",
-					Text:                 "",
-				}); err != nil {
-					errPrint(err)
-					continue
-				}
-
-			}
-		}
-	})
-}
-
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if serve {
-		m := machine.New(ctx)
-		lis, err := net.Listen("tcp", fmt.Sprintf(":%v", 9000))
-		defer lis.Close()
-		errExit(err)
-		srv := grpc.NewServer()
-		m.Go(func(routine machine.Routine) {
-			if err := srv.Serve(lis); err != nil {
-				errPrint(err)
-			}
-		})
-		m.Go(func(routine machine.Routine) {
-			for {
-				select {
-				case <-routine.Context().Done():
-					srv.Stop()
-				}
-			}
-		})
-		m.Wait()
-	} else {
-		m := machine.New(ctx)
-		conn, err := grpc.DialContext(ctx, target, grpc.WithInsecure())
-		errExit(err)
-		defer conn.Close()
-		client := chatpb.NewChatServiceClient(conn)
-		stream, err := client.Chat(ctx)
-		errExit(err)
-
-		m.Go(func(routine machine.Routine) {
-			reader := bufio.NewReader(os.Stdin)
-			defer reader.Discard(reader.Buffered())
-			for {
-				select {
-				case <-routine.Context().Done():
-					return
-				default:
-					text, _ := reader.ReadString('\n')
-					text = strings.TrimSpace(text)
-					reader.Reset(os.Stdin)
-					if len(text) > 0 {
-						if err := stream.Send(&chatpb.ChatRequest{
-							Channel: "default",
-							Text:    text,
-						}); err != nil {
-							errPrint(err)
-						}
+	m := machine.New(ctx)
+	conn, err := grpc.Dial(target, grpc.WithInsecure())
+	errExit(err)
+	defer conn.Close()
+	client := chatpb.NewChatServiceClient(conn)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"X-CHANNEL":     channel,
+	}))
+	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
+	stream, err := client.Chat(ctx)
+	errExit(err)
+	m.Go(func(routine machine.Routine) {
+		reader := bufio.NewReader(os.Stdin)
+		defer reader.Discard(reader.Buffered())
+		for {
+			select {
+			case <-routine.Context().Done():
+				return
+			default:
+				text, _ := reader.ReadString('\n')
+				text = strings.TrimSpace(text)
+				if len(text) > 0 {
+					if err := stream.Send(&chatpb.ChatRequest{
+						Text: text,
+					}); err != nil {
+						errPrint(err)
+						return
 					}
 				}
+				reader.Reset(os.Stdin)
 			}
-
-		})
-		m.Go(func(routine machine.Routine) {
-			for {
-				select {
-				case <-routine.Context().Done():
-					return
-				default:
-					resp, err := stream.Recv()
-					if err != nil {
-						errPrint(err)
+		}
+	})
+	m.Go(func(routine machine.Routine) {
+		for {
+			select {
+			case <-routine.Context().Done():
+				return
+			default:
+				resp, err := stream.Recv()
+				if err != nil {
+					if err == io.EOF {
 						continue
 					}
+					return
+				}
+				if resp != nil && resp.Text != "" {
 					str, err := encoder.MarshalToString(resp)
 					if err != nil {
 						errPrint(err)
@@ -149,9 +91,9 @@ func main() {
 					fmt.Println(str)
 				}
 			}
-		})
-		m.Wait()
-	}
+		}
+	})
+	m.Wait()
 }
 
 func errExit(err error) {

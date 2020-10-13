@@ -9,7 +9,6 @@ service ChatService {
 }
 
 message ChatRequest {
-  string channel =1;
   string text =2;
 }
 
