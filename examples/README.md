@@ -2,6 +2,12 @@
 
 Higher level examples using the machine library.
 
+- [Machine Examples](#machine-examples)
+  * [gRPC Bidirectional Chat Server](#grpc-bidirectional-chat-server)
+    + [Design](#design)
+    + [Start Server](#start-server)
+    + [Start Client](#start-client)
+
 ## gRPC Bidirectional Chat Server
 
 ### Design
