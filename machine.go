@@ -159,7 +159,11 @@ func (m *Machine) serve() {
 }
 
 // Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.
+// At least one goroutine must have finished in order for wait to un-block
 func (m *Machine) Wait() {
+	for m.Total() == 0 {
+
+	}
 	for m.Active() > 0 {
 		for len(m.workQueue) > 0 {
 		}

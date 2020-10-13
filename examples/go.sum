@@ -3,6 +3,8 @@ github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/autom8ter/machine v0.0.9 h1:biYohEZ/DZ7wntEH9DSJCEs2X1yu43rwo229B8YyZx0=
 github.com/autom8ter/machine v0.0.9/go.mod h1:rZXVWB7cfadu8ORTW7RfXYMTnXNxfEJk3C8M6Pu3g6I=
+github.com/autom8ter/machine v0.1.0 h1:ZI5U2I76UAAdGZYVbVPfjsJEIO0rloOzcx72jshkhUs=
+github.com/autom8ter/machine v0.1.0/go.mod h1:rZXVWB7cfadu8ORTW7RfXYMTnXNxfEJk3C8M6Pu3g6I=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=

@@ -1,0 +1,13 @@
+name: "example"
+jobs:
+  - name: "hello world"
+    lang: "bash"
+    sleep: "1s"
+    script: |
+      echo "hello world"
+
+  - name: "hello world 2"
+    lang: "bash"
+    sleep: "1s"
+    script: |
+      echo "hello world 2"

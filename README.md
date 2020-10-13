@@ -26,6 +26,7 @@ All examples are < 500 lines of code(excluding code generation)
 
 - [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
 - [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
+- [Concurrent Cron Job Server](examples/README.md#concurrent-cron-server)
 
 ## Usage
 
@@ -169,7 +170,8 @@ Total returns total goroutines that have been executed by the machine
 func (m *Machine) Wait()
 ```
 Wait blocks until total active goroutine count reaches zero for the instance and
-all of it's children.
+all of it's children. At least one goroutine must have finished in order for
+wait to un-block
 
 #### type Middleware
 

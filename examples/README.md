@@ -40,7 +40,7 @@ subscribed to the accounting channel.
 
 - (~ 150 lines)
 - straight up transparent reverse proxy
-- zero dependencies
+- zero dependencies besides logger
 
 
     go run reverse-proxy/main.go --port 5000 --target $(upstream ip address/port)
@@ -48,3 +48,34 @@ subscribed to the accounting channel.
 Test proxy:
 
     curl $(local proxy)
+
+## Concurrent Cron Server
+
+- [Implementation](cron/main.go)
+
+- (~ 100 lines)
+- zero dependencies besides logger
+- execute any number of shell scripts in separate threads, each with their own timer
+- config file to hold cron job configuration
+- every cron is cleaned up when the parent goroutine is cancelled/times out
+
+example config: 
+```text
+name: "example"
+jobs:
+  - name: "hello world"
+    lang: "bash"
+    sleep: "1s"
+    script: |
+      echo "hello world"
+
+  - name: "hello world 2"
+    lang: "bash"
+    sleep: "1s"
+    script: |
+      echo "hello world 2"
+```
+
+#### Start Cron Server
+    
+    go run cron/main.go --config cron/cron.yaml
