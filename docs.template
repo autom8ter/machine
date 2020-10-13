@@ -16,7 +16,9 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - middlewares for wrapping/decorating functions
 
-- "Sub" machines for creating a dependency tree between groups of goroutines
+- "sub" machines for creating a dependency tree between groups of goroutines
+
+- greater than 80% test coverage
 
 ## Examples
 
