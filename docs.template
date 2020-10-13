@@ -22,6 +22,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 ## Examples
 
+All examples are < 500 lines of code(excluding code generation)
+
 - [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
 
 {{ .EmitUsage }}

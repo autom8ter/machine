@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"strings"
+	"time"
 )
 
 type chat struct {
@@ -66,9 +67,10 @@ func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
 			if obj != nil {
 				msg := obj.(*message)
 				if err := server.Send(&chatpb.ChatResponse{
-					Channel: channel,
-					Text:    msg.text,
-					User:    msg.email,
+					Channel:   channel,
+					Text:      msg.text,
+					User:      msg.email,
+					Timestamp: time.Now().String(),
 				}); err != nil {
 					c.logger.Error("failed to start subscription",
 						zap.String("channel", channel),
