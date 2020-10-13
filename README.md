@@ -18,6 +18,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - "Sub" machines for creating a dependency tree between groups of goroutines
 
+[Examples](examples/README.md)
+
 ## Usage
 
 #### type Func

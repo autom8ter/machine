@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"github.com/autom8ter/machine"
 	chatpb "github.com/autom8ter/machine/examples/gen/go/example/chat"
+	"github.com/autom8ter/machine/examples/helpers"
 	"github.com/golang/protobuf/jsonpb"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"io"
@@ -34,9 +36,18 @@ var (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	logger := helpers.Logger(
+		zap.String("type", "client"),
+		zap.String("target", target),
+		zap.String("channel", channel),
+	)
 	m := machine.New(ctx)
 	conn, err := grpc.Dial(target, grpc.WithInsecure())
-	errExit(err)
+	if err != nil {
+		logger.Warn("failed to dial server", zap.Error(err))
+		return
+	}
+
 	defer conn.Close()
 	client := chatpb.NewChatServiceClient(conn)
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
@@ -46,7 +57,10 @@ func main() {
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 	stream, err := client.Chat(ctx)
-	errExit(err)
+	if err != nil {
+		logger.Warn("failed to start chat stream", zap.Error(err))
+		return
+	}
 	m.Go(func(routine machine.Routine) {
 		reader := bufio.NewReader(os.Stdin)
 		defer reader.Discard(reader.Buffered())
@@ -61,7 +75,7 @@ func main() {
 					if err := stream.Send(&chatpb.ChatRequest{
 						Text: text,
 					}); err != nil {
-						errPrint(err)
+						logger.Warn("failed to stream from os.Stdin to server", zap.Error(err))
 						return
 					}
 				}
@@ -85,7 +99,7 @@ func main() {
 				if resp != nil && resp.Text != "" {
 					str, err := encoder.MarshalToString(resp)
 					if err != nil {
-						errPrint(err)
+						logger.Warn("failed to encode response", zap.Error(err))
 						continue
 					}
 					fmt.Println(str)
@@ -94,17 +108,4 @@ func main() {
 		}
 	})
 	m.Wait()
-}
-
-func errExit(err error) {
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
-
-func errPrint(err error) {
-	if err != nil {
-		fmt.Println(err)
-	}
 }

@@ -13,6 +13,3 @@ proto: ## regenerate gRPC code
 	@rm -rf gen
 	@docker run -v `pwd`:/tmp colemanword/prototool:latest prototool generate
 	@go fmt ./...
-
-run: ## run the server
-	@go run main.go
