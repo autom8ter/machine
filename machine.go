@@ -5,10 +5,15 @@ package machine
 import (
 	"context"
 	"math/rand"
+	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
+
+const DefaultMaxRoutines = 1000
 
 // Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 type Machine struct {
@@ -37,7 +42,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		o(opts)
 	}
 	if opts.maxRoutines <= 0 {
-		opts.maxRoutines = 10000
+		opts.maxRoutines = DefaultMaxRoutines
 	}
 	if opts.pubsub == nil {
 		opts.pubsub = &pubSub{
@@ -85,9 +90,7 @@ func (p *Machine) Tags() []string {
 }
 
 // Go calls the given function in a new goroutine.
-//
-// The first call to return a non-nil error who's cause is machine.Cancel cancels the context of every job.
-// All errors that are not of type machine.Cancel will be returned by Wait.
+// it is passed information about the goroutine at runtime via the Routine interface
 func (m *Machine) Go(fn Func, opts ...GoOpt) {
 	o := &goOpts{}
 	for _, opt := range opts {
@@ -102,8 +105,14 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
+	interrupt := make(chan os.Signal, 1)
+
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interrupt)
 	for {
 		select {
+		case <-interrupt:
+			m.Cancel()
 		case <-m.done:
 			return
 		case w := <-m.workQueue:

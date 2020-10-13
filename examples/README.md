@@ -9,7 +9,7 @@ Higher level examples using the machine library.
     + [Start Client](#start-client)
 
 ## gRPC Bidirectional Chat Server
-
+- (~ 300 lines)
 ### Design
 
 - clients join a channel with a single request that starts streaming from os.Stdin -> chat server
@@ -17,12 +17,12 @@ Higher level examples using the machine library.
 - [Protobuf API](chat/chat.proto)
 - [Implementation](chat/chat.go)
 
-### Start Server
+#### Start Server
 
     go run chat/server/main.go --port 9000
 
 
-### Start Client
+#### Start Client
 In one terminal:
 
     go run chat/client/main.go --channel accounting --target localhost:9000
@@ -33,4 +33,16 @@ In a second terminal:
 
 now start typing in either terminal, messages should be broadcasted to both terminals since they are both 
 subscribed to the accounting channel.
-    
+
+## TCP Reverse Proxy
+
+- (~ 150 lines)
+- straight up transparent reverse proxy
+- zero dependencies
+
+
+    go run reverse-proxy/main.go --port 5000 --target $(upstream ip address/port)
+
+Test proxy:
+
+    curl $(local proxy)

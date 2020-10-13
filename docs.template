@@ -25,5 +25,6 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 All examples are < 500 lines of code(excluding code generation)
 
 - [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
+- [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
 
 {{ .EmitUsage }}

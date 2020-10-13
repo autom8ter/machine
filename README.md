@@ -25,8 +25,13 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 All examples are < 500 lines of code(excluding code generation)
 
 - [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
+- [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
 
 ## Usage
+
+```go
+const DefaultMaxRoutines = 1000
+```
 
 #### type Func
 
@@ -119,11 +124,8 @@ Close completely closes the machine instance & all of it's children
 ```go
 func (m *Machine) Go(fn Func, opts ...GoOpt)
 ```
-Go calls the given function in a new goroutine.
-
-The first call to return a non-nil error who's cause is machine.Cancel cancels
-the context of every job. All errors that are not of type machine.Cancel will be
-returned by Wait.
+Go calls the given function in a new goroutine. it is passed information about
+the goroutine at runtime via the Routine interface
 
 #### func (*Machine) Parent
 
