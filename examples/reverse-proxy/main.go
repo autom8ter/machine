@@ -9,6 +9,9 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func init() {
@@ -48,26 +51,26 @@ func main() {
 	mach.Go(func(routine machine.Routine) {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-routine.Context().Done():
 				return
 			case c := <-pending:
-				if ctx.Err() != nil {
+				if routine.Context().Err() != nil {
 					return
 				}
 				mach.Go(func(routine machine.Routine) {
-					defer c.Close()
 					targetConn, err := net.DialTCP("tcp", nil, targetAddr)
 					if err != nil {
 						logger.Warn("failed to dial target", zap.Error(err))
 						return
 					}
-					defer targetConn.Close()
 					targetConn.SetWriteBuffer(1024)
 					targetConn.SetReadBuffer(1024)
 					routine.Machine().Go(func(routine machine.Routine) {
 						for {
 							select {
 							case <-routine.Context().Done():
+								targetConn.Close()
+								c.Close()
 								return
 							default:
 								_, err := io.CopyN(c, targetConn, 1024)
@@ -86,6 +89,8 @@ func main() {
 						for {
 							select {
 							case <-routine.Context().Done():
+								targetConn.Close()
+								c.Close()
 								return
 							default:
 								_, err := io.CopyN(targetConn, c, 1024)
@@ -98,8 +103,6 @@ func main() {
 							}
 						}
 					})
-					select {}
-
 				})
 			}
 		}
@@ -111,7 +114,7 @@ func main() {
 	mach.Go(func(routine machine.Routine) {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-routine.Context().Done():
 				return
 			default:
 				conn, err := lis.Accept()
@@ -121,19 +124,25 @@ func main() {
 							continue
 						}
 					}
-					if ctx.Err() != nil {
-						return
+					if routine.Context().Err() == nil {
+						logger.Warn("tcp listener error", zap.Error(err))
 					}
-					logger.Warn("tcp listener error", zap.Error(err))
 					return
 				}
-				if ctx.Err() == nil {
+				if routine.Context().Err() == nil {
 					pending <- conn
 				}
 			}
 		}
 	})
+	interrupt := make(chan os.Signal, 1)
+
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interrupt)
 	select {
+	case <-interrupt:
+		mach.Cancel()
+		break
 	case <-ctx.Done():
 		break
 	}

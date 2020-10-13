@@ -53,24 +53,25 @@ Test proxy:
 
 - [Implementation](cron/main.go)
 
-- (~ 100 lines)
+- (~ 150 lines)
 - zero dependencies besides logger
 - execute any number of shell scripts in separate threads, each with their own timer
 - config file to hold cron job configuration
 - every cron is cleaned up when the parent goroutine is cancelled/times out
+- get crons via http GET request to /cron
+- add cron at runtime via http POST request to /cron/job
+
 
 example config: 
 ```text
 name: "example"
 jobs:
   - name: "hello world"
-    lang: "bash"
     sleep: "1s"
     script: |
       echo "hello world"
 
   - name: "hello world 2"
-    lang: "bash"
     sleep: "1s"
     script: |
       echo "hello world 2"
@@ -78,4 +79,18 @@ jobs:
 
 #### Start Cron Server
     
-    go run cron/main.go --config cron/cron.yaml
+    go run cron/main.go --config cron/cron.yaml --port 8000
+
+#### Get Cron Jobs
+
+    curl -X GET http://localhost:8000/cron
+    
+#### Add Cron Job
+
+    curl -L -X POST 'http://localhost:8000/cron/job' \
+    -H 'Content-Type: application/json' \
+    --data-raw '{
+        "name": "whoami",
+        "script": "whoami",
+        "sleep": "5s"
+    }'

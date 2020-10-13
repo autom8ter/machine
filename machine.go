@@ -179,7 +179,7 @@ func (p *Machine) Cancel() {
 		if p.cancel != nil {
 			p.cancel()
 			for _, child := range p.children {
-				child.Close()
+				child.Cancel()
 			}
 		}
 	})

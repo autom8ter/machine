@@ -20,6 +20,8 @@ Machine is a zero dependency runtime for managed goroutines. It is inspired by e
 
 - greater than 80% test coverage
 
+- goroutine leak prevention
+
 ## Examples
 
 All examples are < 500 lines of code(excluding code generation)
