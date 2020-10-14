@@ -60,10 +60,9 @@ func runE2ETest(t *testing.T) {
 		routine.Publish(channelName, msg)
 	},
 		GoWithTags("publish"),
-		GoWithTimeout(5 *time.Second),
+		GoWithTimeout(5*time.Second),
 		GoWithMiddlewares(
 			Cron(time.NewTicker(1*time.Second)),
-
 		),
 	)
 	m2 := m.Sub(WithMaxRoutines(3))
