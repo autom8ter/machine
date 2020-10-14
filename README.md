@@ -11,7 +11,7 @@ m := machine.New(ctx,
     // every function executed by machine.Go will recover from panics
 	machine.WithMiddlewares(machine.PanicRecover()),
 	// WithValues passes the value map to the root context of the machine- it is available in the context of all child machine's & all Routine's
-    WithValues(map[interface{}]interface{}{
+        machine.WithValues(map[interface{}]interface{}{
 	    "testing": true,
     }),
 )
