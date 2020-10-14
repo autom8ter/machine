@@ -6,8 +6,14 @@ import "github.com/autom8ter/machine"
 ctx, cancel := context.WithCancel(context.Background())
 defer cancel()
 m := machine.New(ctx,
+	// functions are added to a FIFO channel that will block when active routines == max routines. 
 	machine.WithMaxRoutines(10),
+    // every function executed by machine.Go will recover from panics
 	machine.WithMiddlewares(machine.PanicRecover()),
+	// WithValues passes the value map to the root context of the machine- it is available in the context of all child machine's & all Routine's
+    WithValues(map[interface{}]interface{}{
+	    "testing": true,
+    }),
 )
 defer m.Close()
 
