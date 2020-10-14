@@ -46,7 +46,6 @@ func runE2ETest(t *testing.T) {
 		WithMiddlewares(PanicRecover()),
 	)
 	defer m.Close()
-	defer m.Close()
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine Routine) {
@@ -61,8 +60,10 @@ func runE2ETest(t *testing.T) {
 		routine.Publish(channelName, msg)
 	},
 		GoWithTags("publish"),
+		GoWithTimeout(5 *time.Second),
 		GoWithMiddlewares(
 			Cron(time.NewTicker(1*time.Second)),
+
 		),
 	)
 	m2 := m.Sub(WithMaxRoutines(3))
