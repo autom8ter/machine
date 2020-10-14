@@ -35,7 +35,7 @@
     m.Wait()
 
 
-Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+Machine is a zero dependency library for highly concurrent Go applications. It is inspired by errgroup.Group with extra bells & whistles:
 
 - throttled goroutines
 
