@@ -1,12 +1,6 @@
 # Machine Examples
 
-Higher level examples using the machine library.
-
-- [Machine Examples](#machine-examples)
-  * [gRPC Bidirectional Chat Server](#grpc-bidirectional-chat-server)
-    + [Design](#design)
-    + [Start Server](#start-server)
-    + [Start Client](#start-client)
+Higher level examples using the machine
 
 ## gRPC Bidirectional Chat Server
 - (~ 300 lines)
