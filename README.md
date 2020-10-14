@@ -2,7 +2,7 @@
 
      import "github.com/autom8ter/machine"
 
-Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
+Machine is a zero dependency library for highly concurrent Go applications. It is inspired by errgroup.Group with extra bells & whistles:
 
 - throttled goroutines
 
