@@ -1,5 +1,3 @@
-//go:generate godocdown -template docs.template -o README.md
-
 package machine
 
 import (
@@ -48,6 +46,11 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		opts.pubsub = &pubSub{
 			subscriptions: map[string]map[int]chan interface{}{},
 			subMu:         sync.RWMutex{},
+		}
+	}
+	if opts.data != nil {
+		for k, v := range opts.data {
+			ctx = context.WithValue(ctx, k, v)
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -128,18 +131,18 @@ func (m *Machine) serve() {
 			if w.opts.id == 0 {
 				w.opts.id = rand.Int()
 			}
-			var (
-				child  context.Context
-				cancel func()
-			)
+			ctx, cancel := context.WithCancel(m.ctx)
+			if w.opts.data != nil {
+				for k, v := range w.opts.data {
+					ctx = context.WithValue(ctx, k, v)
+				}
+			}
 			if w.opts.timeout != nil {
-				child, cancel = context.WithTimeout(m.ctx, *w.opts.timeout)
-			} else {
-				child, cancel = context.WithCancel(m.ctx)
+				ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
 			}
 			routine := &goRoutine{
 				machine:  m,
-				ctx:      child,
+				ctx:      ctx,
 				id:       w.opts.id,
 				tags:     w.opts.tags,
 				start:    time.Now(),

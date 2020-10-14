@@ -1,6 +1,8 @@
 package machine
 
-import "time"
+import (
+	"time"
+)
 
 // goOpts holds options for creating a goroutine. It is configured via GoOpt functions.
 type goOpts struct {
@@ -8,6 +10,7 @@ type goOpts struct {
 	tags        []string
 	timeout     *time.Duration
 	middlewares []Middleware
+	data        map[interface{}]interface{}
 }
 
 // GoOpt is a function that configures GoOpts
@@ -41,6 +44,13 @@ func GoWithMiddlewares(middlewares ...Middleware) GoOpt {
 	}
 }
 
+// GoWithValues adds the data to the machine's root context. It can be retrieved with
+func GoWithValues(data map[interface{}]interface{}) GoOpt {
+	return func(o *goOpts) {
+		o.data = data
+	}
+}
+
 // opts are options when creating a machine instance
 type option struct {
 	// MaxRoutines throttles goroutines at the given count
@@ -50,6 +60,7 @@ type option struct {
 	middlewares []Middleware
 	pubsub      PubSub
 	tags        []string
+	data        map[interface{}]interface{}
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -96,5 +107,12 @@ func WithMiddlewares(middlewares ...Middleware) Opt {
 func WithTags(tags []string) Opt {
 	return func(o *option) {
 		o.tags = append(o.tags, tags...)
+	}
+}
+
+// WithValues adds the data to the machine's root context. It can be retrieved with
+func WithValues(data map[interface{}]interface{}) Opt {
+	return func(o *option) {
+		o.data = data
 	}
 }

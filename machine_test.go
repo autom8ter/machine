@@ -44,6 +44,9 @@ func runE2ETest(t *testing.T) {
 	m := New(ctx,
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
+		WithValues(map[interface{}]interface{}{
+		"testing": true,
+		}),
 	)
 	defer m.Close()
 	channelName := "acme.com"
