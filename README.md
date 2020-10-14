@@ -37,19 +37,19 @@
 	m.Wait()
 
 
-Machine is a zero dependency runtime for highly concurrent Go applications. It is inspired by errgroup.Group with extra bells & whistles:
+Machine is a zero dependency runtime for highly concurrent Go applications. It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
 
 - throttled goroutines
 
-- self-cancellable goroutines with context
+- self-cancellable goroutines with [`Context`](https://golang.org/pkg/context#Context)
 
-- global-cancellable goroutines with context (see Cancel)
+- global-cancellable goroutines with context (see [Cancel](https://pkg.go.dev/github.com/autom8ter/machine#Machine.Cancel))
 
-- goroutines have IDs and optional tags for easy debugging(see Stats)
+- goroutines have IDs and optional tags for easy debugging (see [Stats](https://pkg.go.dev/github.com/autom8ter/machine#Machine.Stats))
 
 - publish/subscribe to channels for passing messages between goroutines
 
-- middlewares for wrapping/decorating functions
+- [middlewares](https://pkg.go.dev/github.com/autom8ter/machine#Middleware) for wrapping/decorating functions
 
 - "sub" machines for creating a dependency tree between groups of goroutines
 
@@ -133,37 +133,37 @@ errgroup.Group with extra bells & whistles:
 ```go
 func New(ctx context.Context, options ...Opt) *Machine
 ```
-New Creates a new machine instance with the given root context & options
+New Creates a new machine instance with the given root context & options.
 
 #### func (*Machine) Active
 
 ```go
 func (p *Machine) Active() int
 ```
-Active returns current active managed goroutine count
+Active returns current active managed goroutine count.
 
 #### func (*Machine) Cancel
 
 ```go
 func (p *Machine) Cancel()
 ```
-Cancel cancels every goroutines context within the machine instance & it's
-children
+Cancel cancels every goroutines context within the machine instance and its
+children.
 
 #### func (*Machine) Close
 
 ```go
 func (m *Machine) Close()
 ```
-Close completely closes the machine instance & all of it's children
+Close completely closes the machine instance & all of it's children.
 
 #### func (*Machine) Go
 
 ```go
 func (m *Machine) Go(fn Func, opts ...GoOpt)
 ```
-Go calls the given function in a new goroutine. it is passed information about
-the goroutine at runtime via the Routine interface
+Go calls the given function in a new goroutine. It is passed information about
+the goroutine at runtime via the Routine interface.
 
 #### func (*Machine) Parent
 
@@ -177,7 +177,7 @@ Parent returns the parent Machine instance if it exists and nil if not.
 ```go
 func (m *Machine) Stats() *Stats
 ```
-Stats returns Goroutine information from the machine
+Stats returns Goroutine information from the machine.
 
 #### func (*Machine) Sub
 
@@ -192,14 +192,14 @@ context.
 ```go
 func (p *Machine) Tags() []string
 ```
-Tags returns the machine's tags
+Tags returns the machine's tags.
 
 #### func (*Machine) Total
 
 ```go
 func (p *Machine) Total() int
 ```
-Total returns total goroutines that have been executed by the machine
+Total returns total goroutines that have been executed by the machine.
 
 #### func (*Machine) Wait
 
@@ -208,7 +208,7 @@ func (m *Machine) Wait()
 ```
 Wait blocks until total active goroutine count reaches zero for the instance and
 all of it's children. At least one goroutine must have finished in order for
-wait to un-block
+wait to un-block.
 
 #### type Middleware
 
@@ -216,14 +216,14 @@ wait to un-block
 type Middleware func(fn Func) Func
 ```
 
-Middleware is a function that wraps/modifies the behavior of a machine.Func.
+Middleware is a function that wraps/modifies the behavior of a [machine.Func](https://pkg.go.dev/github.com/autom8ter/machine#Func).
 
 #### func  After
 
 ```go
 func After(afterFunc func(routine Routine)) Middleware
 ```
-After exectues the afterFunc after the main goroutine exits.
+After executes the afterFunc after the main goroutine exits.
 
 #### func  Before
 
@@ -238,7 +238,7 @@ Before exectues the beforeFunc before the main goroutine is executed.
 func Cron(ticker *time.Ticker) Middleware
 ```
 Cron is a middleware that execute the function every time the ticker ticks until
-the goroutine's context cancels
+the goroutine's context is cancelled.
 
 #### func  Decider
 
@@ -261,7 +261,7 @@ PanicRecover wraps a goroutine with a middleware the recovers from panics.
 type Opt func(o *option)
 ```
 
-Opt is a single option when creating a machine instance with New
+Opt is a single option when creating a machine instance with [New](https://pkg.go.dev/github.com/autom8ter/machine#New).
 
 #### func  WithChildren
 
@@ -297,7 +297,7 @@ func WithParent(parent *Machine) Opt
 ```go
 func WithPubSub(pubsub PubSub) Opt
 ```
-WithPubSub sets the pubsub implementation for the machine instance. An inmemory
+WithPubSub sets the pubsub implementation for the machine instance. An in-memory
 implementation is used if none is provided.
 
 #### func  WithTags
@@ -346,7 +346,7 @@ type Routine interface {
 }
 ```
 
-Routine is an interface representing a goroutine
+Routine is an interface representing a goroutine.
 
 #### type RoutineStats
 
@@ -359,7 +359,7 @@ type RoutineStats struct {
 }
 ```
 
-RoutineStats holds information about a single goroutine
+RoutineStats holds information about a single goroutine.
 
 #### type Stats
 
@@ -374,11 +374,11 @@ type Stats struct {
 }
 ```
 
-Stats holds information about goroutines
+Stats holds information about goroutines.
 
 #### func (Stats) String
 
 ```go
 func (s Stats) String() string
 ```
-String prints a pretty json string of the stats
+String prints a pretty json string of the stats.
