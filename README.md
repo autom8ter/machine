@@ -3,15 +3,15 @@
 ```go
 import "github.com/autom8ter/machine"
 
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
-m := machine.New(ctx,
+m := machine.New(context.Background(),
 	// functions are added to a FIFO channel that will block when active routines == max routines. 
 	machine.WithMaxRoutines(10),
         // every function executed by machine.Go will recover from panics
 	machine.WithMiddlewares(machine.PanicRecover()),
 	// WithValue passes the value to the root context of the machine- it is available in the context of all child machine's & all Routine's
         machine.WithValue("testing", true),
+        // WithTimeout cancels the machine's context after the given timeout
+        machine.WithTimeout(30 *time.Second)
 )
 defer m.Close()
 
