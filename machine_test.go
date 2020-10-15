@@ -42,9 +42,7 @@ func runE2ETest(t *testing.T) {
 	m := New(context.Background(),
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
-		WithValues(map[interface{}]interface{}{
-			"testing": true,
-		}),
+		WithValue("testing", true),
 		WithDeadline(time.Now().Add(5*time.Second)),
 	)
 	defer m.Close()

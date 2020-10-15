@@ -11,7 +11,8 @@ type goOpts struct {
 	timeout     *time.Duration
 	deadline    *time.Time
 	middlewares []Middleware
-	data        map[interface{}]interface{}
+	key         interface{}
+	val         interface{}
 }
 
 // GoOpt is a function that configures GoOpts
@@ -52,10 +53,11 @@ func GoWithMiddlewares(middlewares ...Middleware) GoOpt {
 	}
 }
 
-// GoWithValues adds the data to the Machine's root context. It can be retrieved with context.Value() in the routine context
-func GoWithValues(data map[interface{}]interface{}) GoOpt {
+// GoWithValues adds the k/v to the routine's root context. It can be retrieved with routine.Context().Value()
+func GoWithValues(key, val interface{}) GoOpt {
 	return func(o *goOpts) {
-		o.data = data
+		o.key = key
+		o.val = val
 	}
 }
 
@@ -68,7 +70,8 @@ type option struct {
 	middlewares []Middleware
 	pubsub      PubSub
 	tags        []string
-	data        map[interface{}]interface{}
+	key         interface{}
+	val         interface{}
 	timeout     *time.Duration
 	deadline    *time.Time
 }
@@ -120,10 +123,11 @@ func WithTags(tags []string) Opt {
 	}
 }
 
-// WithValues adds the data to the Machine's root context. It can be retrieved with context.Value() in all sub routine contexts
-func WithValues(data map[interface{}]interface{}) Opt {
+// WithValue adds the k/v to the Machine's root context. It can be retrieved with context.Value() in all sub routine contexts
+func WithValue(key, val interface{}) Opt {
 	return func(o *option) {
-		o.data = data
+		o.key = key
+		o.val = val
 	}
 }
 

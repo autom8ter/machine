@@ -46,10 +46,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 			subMu:         sync.RWMutex{},
 		}
 	}
-	if opts.data != nil {
-		for k, v := range opts.data {
-			ctx = context.WithValue(ctx, k, v)
-		}
+	if opts.key != nil && opts.val != nil {
+		ctx = context.WithValue(ctx, opts.key, opts.val)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	if opts.timeout != nil {
@@ -133,10 +131,8 @@ func (m *Machine) serve() {
 				w.opts.id = genUUID()
 			}
 			ctx, cancel := context.WithCancel(m.ctx)
-			if w.opts.data != nil {
-				for k, v := range w.opts.data {
-					ctx = context.WithValue(ctx, k, v)
-				}
+			if w.opts.key != nil && w.opts.val != nil {
+				ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
 			}
 			if w.opts.timeout != nil {
 				ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)

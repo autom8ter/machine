@@ -8,12 +8,10 @@ defer cancel()
 m := machine.New(ctx,
 	// functions are added to a FIFO channel that will block when active routines == max routines. 
 	machine.WithMaxRoutines(10),
-    // every function executed by machine.Go will recover from panics
+        // every function executed by machine.Go will recover from panics
 	machine.WithMiddlewares(machine.PanicRecover()),
-	// WithValues passes the value map to the root context of the machine- it is available in the context of all child machine's & all Routine's
-        machine.WithValues(map[interface{}]interface{}{
-	    "testing": true,
-    }),
+	// WithValue passes the value map to the root context of the machine- it is available in the context of all child machine's & all Routine's
+        machine.WithValue("testing", true),
 )
 defer m.Close()
 
