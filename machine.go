@@ -2,8 +2,11 @@ package machine
 
 import (
 	"context"
+	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -11,8 +14,9 @@ const DefaultMaxRoutines = 1000
 
 // Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
 type Machine struct {
+	id          string
 	parent      *Machine
-	children    []*Machine
+	children    map[string]*Machine
 	childMu     sync.RWMutex
 	done        chan struct{}
 	cancel      func()
@@ -29,6 +33,7 @@ type Machine struct {
 	total       int64
 	timeout     *time.Duration
 	deadline    *time.Time
+	interupt    chan os.Signal
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -56,9 +61,17 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.deadline != nil {
 		ctx, cancel = context.WithDeadline(ctx, *opts.deadline)
 	}
+	if opts.id == "" {
+		opts.id = genUUID()
+	}
+	children := map[string]*Machine{}
+	for _, c := range opts.children {
+		children[c.id] = c
+	}
 	m := &Machine{
+		id:          opts.id,
 		parent:      opts.parent,
-		children:    opts.children,
+		children:    children,
 		childMu:     sync.RWMutex{},
 		done:        make(chan struct{}, 1),
 		cancel:      cancel,
@@ -75,6 +88,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		total:       0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
+		interupt:    make(chan os.Signal, 1),
 	}
 	go m.serve()
 	return m
@@ -113,8 +127,12 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
+	signal.Notify(m.interupt, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(m.interupt)
 	for {
 		select {
+		case <-m.interupt:
+			m.Cancel()
 		case <-m.done:
 			return
 		case w := <-m.workQueue:
@@ -188,10 +206,12 @@ func (p *Machine) Cancel() {
 	})
 }
 
-// Stats returns Goroutine information from the machine
+// Stats returns Goroutine information from the machine and all of it's children
 func (m *Machine) Stats() *Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+	m.childMu.RLock()
+	defer m.childMu.RUnlock()
 	copied := []RoutineStats{}
 	for _, v := range m.routines {
 		if v != nil {
@@ -203,7 +223,8 @@ func (m *Machine) Stats() *Stats {
 			})
 		}
 	}
-	return &Stats{
+	stats := &Stats{
+		ID:               m.id,
 		Tags:             m.tags,
 		TotalRoutines:    m.Total(),
 		ActiveRoutines:   len(copied),
@@ -214,26 +235,33 @@ func (m *Machine) Stats() *Stats {
 		Timeout:          m.timeout,
 		Deadline:         m.deadline,
 	}
+
+	for _, child := range m.children {
+		stats.Children = append(stats.Children, child.Stats())
+	}
+	return stats
 }
 
 // Close completely closes the machine instance & all of it's children
 func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
-		m.done <- struct{}{}
-		m.pubsub.Close()
 		for _, child := range m.children {
 			child.Close()
 		}
+		m.done <- struct{}{}
+		m.pubsub.Close()
 	})
 }
 
 // Sub returns a nested Machine instance that is dependent on the parent machine's context.
+// It inherits the parent's pubsub implementation & middlewares if none are provided
+// Sub machine's do not inherit their parents max routine setting
 func (m *Machine) Sub(opts ...Opt) *Machine {
-	opts = append(opts, WithParent(m))
+	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithPubSub(m.pubsub), WithParent(m)}, opts...)
 	sub := New(m.ctx, opts...)
 	m.childMu.Lock()
-	m.children = append(m.children, sub)
+	m.children[sub.ID()] = sub
 	m.childMu.Unlock()
 	return sub
 }
@@ -257,4 +285,9 @@ func (m *Machine) CancelRoutine(id string) {
 	if r, ok := m.routines[id]; ok {
 		r.Cancel()
 	}
+}
+
+// ID returns the machine instance's unique id.
+func (m *Machine) ID() string {
+	return m.id
 }

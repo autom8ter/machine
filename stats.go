@@ -8,6 +8,7 @@ import (
 
 // Stats holds information about goroutines
 type Stats struct {
+	ID               string         `json:"id"`
 	Tags             []string       `json:"tags"`
 	TotalRoutines    int            `json:"totalRoutines"`
 	ActiveRoutines   int            `json:"activeRoutines"`
@@ -17,6 +18,7 @@ type Stats struct {
 	TotalMiddlewares int            `json:"totalMiddlewares"`
 	Timeout          *time.Duration `json:"timeout"`
 	Deadline         *time.Time     `json:"deadline"`
+	Children         []*Stats       `json:"children"`
 }
 
 // String prints a pretty json string of the stats

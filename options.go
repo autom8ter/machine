@@ -63,6 +63,7 @@ func GoWithValues(key, val interface{}) GoOpt {
 
 // opts are options when creating a machine instance
 type option struct {
+	id string
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines int
 	parent      *Machine
@@ -142,5 +143,12 @@ func WithTimeout(to time.Duration) Opt {
 func WithDeadline(deadline time.Time) Opt {
 	return func(o *option) {
 		o.deadline = &deadline
+	}
+}
+
+// WithID sets the machine instances unique id. If one isn't provided, a unique id will be assigned
+func WithID(id string) Opt {
+	return func(o *option) {
+		o.id = id
 	}
 }

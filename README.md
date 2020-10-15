@@ -10,7 +10,7 @@ m := machine.New(ctx,
 	machine.WithMaxRoutines(10),
         // every function executed by machine.Go will recover from panics
 	machine.WithMiddlewares(machine.PanicRecover()),
-	// WithValue passes the value map to the root context of the machine- it is available in the context of all child machine's & all Routine's
+	// WithValue passes the value to the root context of the machine- it is available in the context of all child machine's & all Routine's
         machine.WithValue("testing", true),
 )
 defer m.Close()
