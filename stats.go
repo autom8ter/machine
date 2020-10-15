@@ -8,12 +8,15 @@ import (
 
 // Stats holds information about goroutines
 type Stats struct {
-	Tags           []string       `json:"tags"`
-	TotalRoutines  int            `json:"totalRoutines"`
-	ActiveRoutines int            `json:"activeRoutines"`
-	Routines       []RoutineStats `json:"routines"`
-	TotalChildren  int            `json:"totalChildren"`
-	HasParent      bool           `json:"hasParent"`
+	Tags             []string       `json:"tags"`
+	TotalRoutines    int            `json:"totalRoutines"`
+	ActiveRoutines   int            `json:"activeRoutines"`
+	Routines         []RoutineStats `json:"routines"`
+	TotalChildren    int            `json:"totalChildren"`
+	HasParent        bool           `json:"hasParent"`
+	TotalMiddlewares int            `json:"totalMiddlewares"`
+	Timeout          *time.Duration `json:"timeout"`
+	Deadline         *time.Time     `json:"deadline"`
 }
 
 // String prints a pretty json string of the stats
@@ -24,7 +27,7 @@ func (s Stats) String() string {
 
 // RoutineStats holds information about a single goroutine
 type RoutineStats struct {
-	PID      int           `json:"pid"`
+	PID      string        `json:"pid"`
 	Start    time.Time     `json:"start"`
 	Duration time.Duration `json:"duration"`
 	Tags     []string      `json:"tags"`

@@ -39,25 +39,31 @@ func benchmarkEmpty(b *testing.B) {
 
 func runE2ETest(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
-	defer cancel()
-	m := New(ctx,
+	m := New(context.Background(),
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
 		WithValues(map[interface{}]interface{}{
-		"testing": true,
+			"testing": true,
 		}),
+		WithDeadline(time.Now().Add(5*time.Second)),
 	)
 	defer m.Close()
 	channelName := "acme.com"
 	var seen = false
 	m.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		routine.Subscribe(channelName, func(obj interface{}) {
+
 			seen = true
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
 		})
 	}, GoWithTags("subscribe"))
 	m.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		msg := "hey there bud!"
 		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
 		routine.Publish(channelName, msg)
@@ -73,6 +79,9 @@ func runE2ETest(t *testing.T) {
 	var seenCron = false
 
 	m2.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		seenCron = true
 		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
@@ -83,6 +92,9 @@ func runE2ETest(t *testing.T) {
 		),
 	)
 	m2.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		seenCron = true
 		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
@@ -93,6 +105,9 @@ func runE2ETest(t *testing.T) {
 		),
 	)
 	m2.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		seenCron = true
 		t.Logf("cron3 stats= %s\n", routine.Machine().Stats().String())
 	},
@@ -122,9 +137,10 @@ func runE2ETest(t *testing.T) {
 
 func runStatsTest(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
-	defer cancel()
-	m := New(ctx)
+	m := New(
+		context.Background(),
+		WithTimeout(3*time.Second),
+	)
 	defer m.Close()
 	for x := 0; x < 100; x++ {
 		m.Go(func(routine Routine) {
@@ -145,5 +161,4 @@ func runStatsTest(t *testing.T) {
 	if total != 100 {
 		t.Fatalf("expected 100 total routines, got: %v\n", total)
 	}
-
 }

@@ -13,7 +13,7 @@ type Routine interface {
 	// Cancel cancels the context returned from Context()
 	Cancel()
 	// PID() is the goroutines unique process id
-	PID() int
+	PID() string
 	// Tags() are the tags associated with the goroutine
 	Tags() []string
 	// Start is when the goroutine started
@@ -31,7 +31,7 @@ type Routine interface {
 type goRoutine struct {
 	machine  *Machine
 	ctx      context.Context
-	id       int
+	id       string
 	tags     []string
 	start    time.Time
 	doneOnce sync.Once
@@ -42,7 +42,7 @@ func (r *goRoutine) Context() context.Context {
 	return r.ctx
 }
 
-func (r *goRoutine) PID() int {
+func (r *goRoutine) PID() string {
 	return r.id
 }
 

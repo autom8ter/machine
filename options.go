@@ -6,9 +6,10 @@ import (
 
 // goOpts holds options for creating a goroutine. It is configured via GoOpt functions.
 type goOpts struct {
-	id          int
+	id          string
 	tags        []string
 	timeout     *time.Duration
+	deadline    *time.Time
 	middlewares []Middleware
 	data        map[interface{}]interface{}
 }
@@ -24,7 +25,7 @@ func GoWithTags(tags ...string) GoOpt {
 }
 
 // GoWithPID is a GoOpt that sets/overrides the process ID of the Routine. A random id is assigned if this option is not used.
-func GoWithPID(id int) GoOpt {
+func GoWithPID(id string) GoOpt {
 	return func(o *goOpts) {
 		o.id = id
 	}
@@ -37,6 +38,13 @@ func GoWithTimeout(to time.Duration) GoOpt {
 	}
 }
 
+// GoWithDeadline is a GoOpt that creates the Routine's context with the given deadline.
+func GoWithDeadline(deadline time.Time) GoOpt {
+	return func(o *goOpts) {
+		o.deadline = &deadline
+	}
+}
+
 // GoWithMiddlewares wraps the gived function with the input middlewares.
 func GoWithMiddlewares(middlewares ...Middleware) GoOpt {
 	return func(o *goOpts) {
@@ -44,7 +52,7 @@ func GoWithMiddlewares(middlewares ...Middleware) GoOpt {
 	}
 }
 
-// GoWithValues adds the data to the machine's root context. It can be retrieved with
+// GoWithValues adds the data to the Machine's root context. It can be retrieved with context.Value() in the routine context
 func GoWithValues(data map[interface{}]interface{}) GoOpt {
 	return func(o *goOpts) {
 		o.data = data
@@ -61,6 +69,8 @@ type option struct {
 	pubsub      PubSub
 	tags        []string
 	data        map[interface{}]interface{}
+	timeout     *time.Duration
+	deadline    *time.Time
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -110,9 +120,23 @@ func WithTags(tags []string) Opt {
 	}
 }
 
-// WithValues adds the data to the machine's root context. It can be retrieved with
+// WithValues adds the data to the Machine's root context. It can be retrieved with context.Value() in all sub routine contexts
 func WithValues(data map[interface{}]interface{}) Opt {
 	return func(o *option) {
 		o.data = data
+	}
+}
+
+// WithTimeout is an Opt that creates the Machine's context with the given timeout value
+func WithTimeout(to time.Duration) Opt {
+	return func(o *option) {
+		o.timeout = &to
+	}
+}
+
+// WithDeadline is an Opt that creates the Machine's context with the given deadline.
+func WithDeadline(deadline time.Time) Opt {
+	return func(o *option) {
+		o.deadline = &deadline
 	}
 }

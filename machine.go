@@ -2,12 +2,8 @@ package machine
 
 import (
 	"context"
-	"math/rand"
-	"os"
-	"os/signal"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -24,13 +20,15 @@ type Machine struct {
 	ctx         context.Context
 	workQueue   chan *work
 	mu          sync.RWMutex
-	routines    map[int]Routine
+	routines    map[string]Routine
 	tags        []string
 	max         int
 	closeOnce   sync.Once
 	doneOnce    sync.Once
 	pubsub      PubSub
 	total       int64
+	timeout     *time.Duration
+	deadline    *time.Time
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -54,22 +52,31 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
+	if opts.timeout != nil {
+		ctx, cancel = context.WithTimeout(ctx, *opts.timeout)
+	}
+	if opts.deadline != nil {
+		ctx, cancel = context.WithDeadline(ctx, *opts.deadline)
+	}
 	m := &Machine{
 		parent:      opts.parent,
 		children:    opts.children,
+		childMu:     sync.RWMutex{},
 		done:        make(chan struct{}, 1),
-		middlewares: opts.middlewares,
 		cancel:      cancel,
+		middlewares: opts.middlewares,
 		ctx:         ctx,
 		workQueue:   make(chan *work),
 		mu:          sync.RWMutex{},
-		routines:    map[int]Routine{},
+		routines:    map[string]Routine{},
 		tags:        opts.tags,
 		max:         opts.maxRoutines,
 		closeOnce:   sync.Once{},
 		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
 		total:       0,
+		timeout:     opts.timeout,
+		deadline:    opts.deadline,
 	}
 	go m.serve()
 	return m
@@ -108,14 +115,8 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
-	interrupt := make(chan os.Signal, 1)
-
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(interrupt)
 	for {
 		select {
-		case <-interrupt:
-			m.Cancel()
 		case <-m.done:
 			return
 		case w := <-m.workQueue:
@@ -128,8 +129,8 @@ func (m *Machine) serve() {
 			for x := m.Active(); x >= m.max; x = m.Active() {
 
 			}
-			if w.opts.id == 0 {
-				w.opts.id = rand.Int()
+			if w.opts.id == "" {
+				w.opts.id = genUUID()
 			}
 			ctx, cancel := context.WithCancel(m.ctx)
 			if w.opts.data != nil {
@@ -139,6 +140,9 @@ func (m *Machine) serve() {
 			}
 			if w.opts.timeout != nil {
 				ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
+			}
+			if w.opts.deadline != nil {
+				ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
 			}
 			routine := &goRoutine{
 				machine:  m,
@@ -164,7 +168,7 @@ func (m *Machine) serve() {
 // Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.
 // At least one goroutine must have finished in order for wait to un-block
 func (m *Machine) Wait() {
-	for m.Total() == 0 {
+	for m.Total() < 1 {
 
 	}
 	for m.Active() > 0 {
@@ -204,12 +208,15 @@ func (m *Machine) Stats() *Stats {
 		}
 	}
 	return &Stats{
-		Tags:           m.tags,
-		TotalRoutines:  m.Total(),
-		ActiveRoutines: len(copied),
-		Routines:       copied,
-		TotalChildren:  len(m.children),
-		HasParent:      m.parent != nil,
+		Tags:             m.tags,
+		TotalRoutines:    m.Total(),
+		ActiveRoutines:   len(copied),
+		Routines:         copied,
+		TotalChildren:    len(m.children),
+		HasParent:        m.parent != nil,
+		TotalMiddlewares: len(m.middlewares),
+		Timeout:          m.timeout,
+		Deadline:         m.deadline,
 	}
 }
 
@@ -238,4 +245,20 @@ func (m *Machine) Sub(opts ...Opt) *Machine {
 // Parent returns the parent Machine instance if it exists and nil if not.
 func (m *Machine) Parent() *Machine {
 	return m.parent
+}
+
+// HasRoutine returns true if the machine has a active routine with the given id
+func (m *Machine) HasRoutine(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.routines[id] != nil
+}
+
+// CancelRoutine cancels the context of the active routine with the given id if it exists.
+func (m *Machine) CancelRoutine(id string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if r, ok := m.routines[id]; ok {
+		r.Cancel()
+	}
 }

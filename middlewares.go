@@ -22,14 +22,32 @@ func Cron(ticker *time.Ticker) Middleware {
 	}
 }
 
+// While is a middleware that will continue to execute the Func while deciderFunc() returns true.
+// The loop breaks the first time deciderFunc() returns false or the routine's context cancels
+func While(deciderFunc func(routine Routine) bool) Middleware {
+	return func(fn Func) Func {
+		return func(routine Routine) {
+			for {
+				select {
+				case <-routine.Context().Done():
+					return
+				default:
+					if !deciderFunc(routine) {
+						return
+					}
+					fn(routine)
+				}
+			}
+		}
+	}
+}
+
 // After exectues the afterFunc after the main goroutine exits.
 func After(afterFunc func(routine Routine)) Middleware {
 	return func(fn Func) Func {
 		return func(routine Routine) {
-			defer func() {
-				afterFunc(routine)
-			}()
 			fn(routine)
+			afterFunc(routine)
 		}
 	}
 }
