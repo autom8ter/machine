@@ -10,27 +10,23 @@ import (
 func Test(t *testing.T) {
 	t.Run("e2e", runE2ETest)
 	t.Run("stats", runStatsTest)
+	t.Run("cache", runCacheTest)
 }
 
 func Benchmark(b *testing.B) {
-	b.Run("empty routine", func(b *testing.B) {
-		/*
-			MC02CG684LVDL:machine Coleman.Word$ go test -bench=.
-			goos: darwin
-			goarch: amd64
-			pkg: github.com/autom8ter/machine
-			Benchmark-8       860584              1366 ns/op             272 B/op          5 allocs/op
-		*/
-		benchmarkEmpty(b)
+	b.Run("benchmarkGoSleep", func(b *testing.B) {
+		benchmarkGoSleep(b, 100*time.Nanosecond)
 	})
 }
 
-func benchmarkEmpty(b *testing.B) {
+//
+func benchmarkGoSleep(b *testing.B, sleep time.Duration) {
 	b.ReportAllocs()
 	m := New(context.Background(), WithMaxRoutines(3))
 	defer m.Close()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine Routine) {
+			time.Sleep(sleep)
 			return
 		})
 	}
@@ -53,11 +49,12 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		routine.Subscribe(channelName, func(obj interface{}) {
-
+		if err := routine.Subscribe(channelName, func(obj interface{}) {
 			seen = true
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
-		})
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}, GoWithTags("subscribe"))
 	m.Go(func(routine Routine) {
 		if routine.Context().Value("testing").(bool) != true {
@@ -65,7 +62,9 @@ func runE2ETest(t *testing.T) {
 		}
 		msg := "hey there bud!"
 		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
-		routine.Publish(channelName, msg)
+		if err := routine.Publish(channelName, msg); err != nil {
+			t.Fatal(err)
+		}
 	},
 		GoWithTags("publish"),
 		GoWithTimeout(5*time.Second),
@@ -159,5 +158,24 @@ func runStatsTest(t *testing.T) {
 	total := m.Stats().TotalRoutines
 	if total != 100 {
 		t.Fatalf("expected 100 total routines, got: %v\n", total)
+	}
+}
+
+func runCacheTest(t *testing.T) {
+	m := New(context.Background())
+	defer m.Close()
+	m.Cache().Set("config", "env", "testing", 5*time.Minute)
+	val, ok := m.Cache().Get("config", "env")
+	if !ok {
+		t.Fatal("key not found")
+	}
+	if val != "testing" {
+		t.Fatal("incorrect cache value")
+	}
+	m.Cache().Sync()
+	m.Cache().Delete("config", "env")
+	_, ok = m.Cache().Get("config", "env")
+	if ok {
+		t.Fatal("key found after deletion")
 	}
 }

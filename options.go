@@ -70,6 +70,7 @@ type option struct {
 	children    []*Machine
 	middlewares []Middleware
 	pubsub      PubSub
+	cache       Cache
 	tags        []string
 	key         interface{}
 	val         interface{}
@@ -97,12 +98,14 @@ func WithPubSub(pubsub PubSub) Opt {
 	}
 }
 
-func WithParent(parent *Machine) Opt {
+// WithCache sets the cache implementation for the machine instance. An inmemory implementation is used if none is provided.
+func WithCache(cache Cache) Opt {
 	return func(o *option) {
-		o.parent = parent
+		o.cache = cache
 	}
 }
 
+// WithChildren sets the machine instances children
 func WithChildren(children ...*Machine) Opt {
 	return func(o *option) {
 		o.children = append(o.children, children...)

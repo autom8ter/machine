@@ -30,6 +30,7 @@ type Machine struct {
 	closeOnce   sync.Once
 	doneOnce    sync.Once
 	pubsub      PubSub
+	cache       Cache
 	total       int64
 	timeout     *time.Duration
 	deadline    *time.Time
@@ -50,6 +51,9 @@ func New(ctx context.Context, options ...Opt) *Machine {
 			subscriptions: map[string]map[int]chan interface{}{},
 			subMu:         sync.RWMutex{},
 		}
+	}
+	if opts.cache == nil {
+		opts.cache = newCache()
 	}
 	if opts.key != nil && opts.val != nil {
 		ctx = context.WithValue(ctx, opts.key, opts.val)
@@ -85,6 +89,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		closeOnce:   sync.Once{},
 		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
+		cache:       opts.cache,
 		total:       0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
@@ -109,6 +114,11 @@ func (p *Machine) Total() int {
 // Tags returns the machine's tags
 func (p *Machine) Tags() []string {
 	return p.tags
+}
+
+// Cache returns the machine's cache implementation. One is automatically set if not provided as an Opt on machine instance creation.
+func (m *Machine) Cache() Cache {
+	return m.cache
 }
 
 // Go calls the given function in a new goroutine.
@@ -251,15 +261,17 @@ func (m *Machine) Close() {
 		}
 		m.done <- struct{}{}
 		m.pubsub.Close()
+		m.Cache().Close()
 	})
 }
 
 // Sub returns a nested Machine instance that is dependent on the parent machine's context.
-// It inherits the parent's pubsub implementation & middlewares if none are provided
+// It inherits the parent's pubsub/cache implementation & middlewares if none are provided
 // Sub machine's do not inherit their parents max routine setting
 func (m *Machine) Sub(opts ...Opt) *Machine {
-	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithPubSub(m.pubsub), WithParent(m)}, opts...)
+	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithCache(m.cache), WithPubSub(m.pubsub)}, opts...)
 	sub := New(m.ctx, opts...)
+	sub.parent = m
 	m.childMu.Lock()
 	m.children[sub.ID()] = sub
 	m.childMu.Unlock()
