@@ -167,6 +167,7 @@ func (c *cache) Delete(key interface{}) {
 
 func (c *cache) Close() {
 	c.once.Do(func() {
+		c.Sync()
 		c.items = sync.Map{}
 	})
 }
