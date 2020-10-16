@@ -81,4 +81,5 @@ func (g *goRoutine) done() {
 		delete(g.machine.routines, g.id)
 		g.machine.mu.Unlock()
 	})
+	routinePool.deallocateRoutine(g)
 }

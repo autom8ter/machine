@@ -168,15 +168,14 @@ func (m *Machine) serve() {
 			if w.opts.deadline != nil {
 				ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
 			}
-			routine := &goRoutine{
-				machine:  m,
-				ctx:      ctx,
-				id:       w.opts.id,
-				tags:     w.opts.tags,
-				start:    time.Now(),
-				doneOnce: sync.Once{},
-				cancel:   cancel,
-			}
+			routine := routinePool.allocateRoutine()
+			routine.machine = m
+			routine.ctx = ctx
+			routine.id = w.opts.id
+			routine.tags = w.opts.tags
+			routine.start = time.Now()
+			routine.doneOnce = sync.Once{}
+			routine.cancel = cancel
 			m.mu.Lock()
 			m.routines[w.opts.id] = routine
 			m.mu.Unlock()
