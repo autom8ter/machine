@@ -16,8 +16,8 @@ type Stats struct {
 	TotalChildren    int            `json:"totalChildren"`
 	HasParent        bool           `json:"hasParent"`
 	TotalMiddlewares int            `json:"totalMiddlewares"`
-	Timeout          *time.Duration `json:"timeout"`
-	Deadline         *time.Time     `json:"deadline"`
+	Timeout          time.Duration  `json:"timeout"`
+	Deadline         time.Time      `json:"deadline"`
 	Children         []*Stats       `json:"children"`
 }
 

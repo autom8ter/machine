@@ -36,6 +36,7 @@ func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg
 		p.subMu.Lock()
 		delete(p.subscriptions[channel], subId)
 		p.subMu.Unlock()
+		close(ch)
 	}()
 	for {
 		select {
@@ -64,8 +65,11 @@ func (p *pubSub) Close() {
 	p.closeOnce.Do(func() {
 		p.subMu.Lock()
 		defer p.subMu.Unlock()
-		for k, _ := range p.subscriptions {
+		for k, v := range p.subscriptions {
 			delete(p.subscriptions, k)
+			for _, v2 := range v {
+				close(v2)
+			}
 		}
 	})
 }

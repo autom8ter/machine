@@ -28,8 +28,8 @@ func newCache(ctx context.Context, ticker *time.Ticker) Cache {
 	child, cancel := context.WithCancel(ctx)
 	n := &namespacedCache{
 		cacheMap:  map[string]*cache{},
-		mu:        &sync.RWMutex{},
-		closeOnce: &sync.Once{},
+		mu:        sync.RWMutex{},
+		closeOnce: sync.Once{},
 		cancel:    cancel,
 	}
 	go func() {
@@ -50,8 +50,8 @@ func newCache(ctx context.Context, ticker *time.Ticker) Cache {
 
 type namespacedCache struct {
 	cacheMap  map[string]*cache
-	mu        *sync.RWMutex
-	closeOnce *sync.Once
+	mu        sync.RWMutex
+	closeOnce sync.Once
 	cancel    func()
 }
 
@@ -78,8 +78,8 @@ func (n *namespacedCache) Set(namespace string, key interface{}, value interface
 	defer n.mu.Unlock()
 	if _, ok := n.cacheMap[namespace]; !ok {
 		n.cacheMap[namespace] = &cache{
-			data: &sync.Map{},
-			once: &sync.Once{},
+			data: sync.Map{},
+			once: sync.Once{},
 		}
 	}
 	if c, ok := n.cacheMap[namespace]; ok {
@@ -126,8 +126,8 @@ func (n *namespacedCache) Close() {
 }
 
 type cache struct {
-	data *sync.Map
-	once *sync.Once
+	data sync.Map
+	once sync.Once
 }
 
 type item struct {
@@ -204,6 +204,6 @@ func (c *cache) Len() int {
 func (c *cache) Close() {
 	c.once.Do(func() {
 		c.Sync()
-		c.data = &sync.Map{}
+		c.data = sync.Map{}
 	})
 }

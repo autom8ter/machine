@@ -18,11 +18,11 @@ func (p *pooledRoutines) allocateRoutine() *goRoutine {
 }
 
 func (p *pooledRoutines) deallocateRoutine(routine *goRoutine) {
-	p.clear(routine)
+	reset(routine)
 	p.pool.Put(routine)
 }
 
-func (p *pooledRoutines) clear(v interface{}) {
+func reset(v interface{}) {
 	e := reflect.ValueOf(v).Elem()
 	e.Set(reflect.Zero(e.Type()))
 }

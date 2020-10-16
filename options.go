@@ -73,8 +73,8 @@ type option struct {
 	tags        []string
 	key         interface{}
 	val         interface{}
-	timeout     *time.Duration
-	deadline    *time.Time
+	timeout     time.Duration
+	deadline    time.Time
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -137,14 +137,14 @@ func WithValue(key, val interface{}) Opt {
 // WithTimeout is an Opt that creates the Machine's context with the given timeout value
 func WithTimeout(to time.Duration) Opt {
 	return func(o *option) {
-		o.timeout = &to
+		o.timeout = to
 	}
 }
 
 // WithDeadline is an Opt that creates the Machine's context with the given deadline.
 func WithDeadline(deadline time.Time) Opt {
 	return func(o *option) {
-		o.deadline = &deadline
+		o.deadline = deadline
 	}
 }
 

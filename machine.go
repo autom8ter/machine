@@ -32,8 +32,8 @@ type Machine struct {
 	pubsub      PubSub
 	cache       Cache
 	total       int64
-	timeout     *time.Duration
-	deadline    *time.Time
+	timeout     time.Duration
+	deadline    time.Time
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -55,11 +55,11 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		ctx = context.WithValue(ctx, opts.key, opts.val)
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	if opts.timeout != nil {
-		ctx, cancel = context.WithTimeout(ctx, *opts.timeout)
+	if opts.timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, opts.timeout)
 	}
-	if opts.deadline != nil {
-		ctx, cancel = context.WithDeadline(ctx, *opts.deadline)
+	if opts.deadline.Unix() > time.Now().Unix() {
+		ctx, cancel = context.WithDeadline(ctx, opts.deadline)
 	}
 	if opts.id == "" {
 		opts.id = genUUID()
@@ -181,8 +181,8 @@ func (m *Machine) serve() {
 			m.mu.Unlock()
 			atomic.AddInt64(&m.total, 1)
 			go func(r *goRoutine) {
-				defer r.done()
 				w.fn(routine)
+				r.done()
 			}(routine)
 		}
 	}
