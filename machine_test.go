@@ -13,27 +13,6 @@ func Test(t *testing.T) {
 	t.Run("cache", runCacheTest)
 }
 
-func Benchmark(b *testing.B) {
-	b.Run("benchmarkGoSleep", func(b *testing.B) {
-		benchmarkGoSleep(b, 100*time.Nanosecond)
-	})
-	b.Run("benchSetCache", benchSetCache)
-}
-
-//
-func benchmarkGoSleep(b *testing.B, sleep time.Duration) {
-	b.ReportAllocs()
-	m := New(context.Background(), WithMaxRoutines(100))
-	defer m.Close()
-	for n := 0; n < b.N; n++ {
-		m.Go(func(routine Routine) {
-			time.Sleep(sleep)
-			return
-		})
-	}
-	m.Wait()
-}
-
 func runE2ETest(t *testing.T) {
 	m := New(context.Background(),
 		WithMaxRoutines(10),
@@ -177,16 +156,27 @@ func runCacheTest(t *testing.T) {
 	}
 }
 
-func benchSetCache(b *testing.B) {
+func BenchmarkGo(b *testing.B) {
 	b.ReportAllocs()
-	m := New(context.Background())
+	m := New(context.Background(), WithMaxRoutines(100))
 	defer m.Close()
+	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine Routine) {
-			m.Cache().Set("testing", fmt.Sprintf("%v", time.Now().UnixNano()), 1, 5*time.Minute)
+			//time.Sleep(100 *time.Millisecond)
+			return
 		})
 	}
-	b.Logf("active = %v\n", m.Active())
-	b.Logf("cached items = %v\n", m.Cache().Len("testing"))
 	m.Wait()
+}
+
+func BenchmarkSetCache(b *testing.B) {
+	b.ReportAllocs()
+	m := New(context.Background(), WithTimeout(5*time.Second))
+	defer m.Close()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		m.Cache().Set("testing", n, 1, 5*time.Minute)
+	}
+	b.Logf("cached items = %v\n", m.Cache().Len("testing"))
 }
