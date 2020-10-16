@@ -75,6 +75,7 @@ type option struct {
 	val         interface{}
 	timeout     time.Duration
 	deadline    time.Time
+	pprof       bool
 }
 
 // Opt is a single option when creating a machine instance with New

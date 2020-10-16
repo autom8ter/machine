@@ -18,7 +18,7 @@ type Cache interface {
 	Range(namespace string, f func(key, value interface{}) bool)
 	// Delete deletes the key and its value from the given namespace.
 	Delete(namespace string, key interface{})
-
+	// Len returns total kv pairs within namespace
 	Len(namespace string) int
 	// Close closes the Cache and frees up resources.
 	Close()

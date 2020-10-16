@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime/pprof"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -17,18 +19,18 @@ type Machine struct {
 	id          string
 	parent      *Machine
 	children    map[string]*Machine
-	childMu     *sync.RWMutex
+	childMu     sync.RWMutex
 	done        chan struct{}
 	cancel      func()
 	middlewares []Middleware
 	ctx         context.Context
 	workQueue   chan *work
-	mu          *sync.RWMutex
+	mu          sync.RWMutex
 	routines    map[string]Routine
 	tags        []string
 	max         int
-	closeOnce   *sync.Once
-	doneOnce    *sync.Once
+	closeOnce   sync.Once
+	doneOnce    sync.Once
 	pubsub      PubSub
 	cache       Cache
 	total       int64
@@ -74,18 +76,18 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	m := &Machine{
 		id:          opts.id,
 		children:    children,
-		childMu:     &sync.RWMutex{},
+		childMu:     sync.RWMutex{},
 		done:        make(chan struct{}, 1),
 		cancel:      cancel,
 		middlewares: opts.middlewares,
 		ctx:         ctx,
-		workQueue:   make(chan *work, 5),
-		mu:          &sync.RWMutex{},
+		workQueue:   make(chan *work, 1),
+		mu:          sync.RWMutex{},
 		routines:    map[string]Routine{},
 		tags:        opts.tags,
 		max:         opts.maxRoutines,
-		closeOnce:   &sync.Once{},
-		doneOnce:    &sync.Once{},
+		closeOnce:   sync.Once{},
+		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
 		cache:       opts.cache,
 		total:       0,
@@ -166,12 +168,20 @@ func (m *Machine) serve() {
 			if w.opts.deadline != nil {
 				ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
 			}
+			now := time.Now()
+			ctx = pprof.WithLabels(ctx, pprof.Labels(
+				"id", w.opts.id,
+				"tags", strings.Join(w.opts.tags, " "),
+				"machine_id", m.id,
+				"start", now.String(),
+			))
+			pprof.Do()
 			routine := routinePool.allocateRoutine()
 			routine.machine = m
 			routine.ctx = ctx
 			routine.id = w.opts.id
 			routine.tags = w.opts.tags
-			routine.start = time.Now()
+			routine.start = now
 			routine.doneOnce = sync.Once{}
 			routine.cancel = cancel
 			m.mu.Lock()
@@ -180,6 +190,7 @@ func (m *Machine) serve() {
 			atomic.AddInt64(&m.total, 1)
 			go func(r *goRoutine) {
 				defer workPool.deallocateWork(w)
+				pprof.SetGoroutineLabels(ctx)
 				w.fn(routine)
 				r.done()
 			}(routine)
