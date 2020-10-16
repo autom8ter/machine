@@ -94,7 +94,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		total:       0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
-		profiling:   opts.pprof,
 	}
 	go m.serve()
 	return m
@@ -136,67 +135,71 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
-	interupt := make(chan os.Signal, 1)
-	signal.Notify(interupt, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(interupt)
-	for {
-		select {
-		case <-interupt:
-			m.Cancel()
-			return
-		case <-m.done:
-			m.Cancel()
-			return
-		case w := <-m.workQueue:
-			for _, ware := range w.opts.middlewares {
-				w.fn = ware(w.fn)
-			}
-			for _, ware := range m.middlewares {
-				w.fn = ware(w.fn)
-			}
-			for x := m.Active(); x >= m.max; x = m.Active() {
+	pprof.Do(m.ctx, pprof.Labels(
+		"machine_id", m.id,
+		"machine_tags", strings.Join(m.tags, " "),
+	), func(machineCtx context.Context) {
+		interupt := make(chan os.Signal, 1)
+		signal.Notify(interupt, os.Interrupt, syscall.SIGTERM)
+		defer signal.Stop(interupt)
+		for {
+			select {
+			case <-interupt:
+				m.Cancel()
+				return
+			case <-m.done:
+				m.Cancel()
+				return
+			case w := <-m.workQueue:
+				for _, ware := range w.opts.middlewares {
+					w.fn = ware(w.fn)
+				}
+				for _, ware := range m.middlewares {
+					w.fn = ware(w.fn)
+				}
+				for x := m.Active(); x >= m.max; x = m.Active() {
 
+				}
+				if w.opts.id == "" {
+					w.opts.id = genUUID()
+				}
+				now := time.Now()
+				pprof.Do(machineCtx, pprof.Labels(
+					"routine_id", w.opts.id,
+					"routine_tags", strings.Join(w.opts.tags, " "),
+					"routine_start", now.String(),
+				), func(child context.Context) {
+					ctx, cancel := context.WithCancel(child)
+					if w.opts.key != nil && w.opts.val != nil {
+						ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
+					}
+					if w.opts.timeout != nil {
+						ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
+					}
+					if w.opts.deadline != nil {
+						ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
+					}
+					routine := routinePool.allocateRoutine()
+					routine.machine = m
+					routine.ctx = ctx
+					routine.id = w.opts.id
+					routine.tags = w.opts.tags
+					routine.start = now
+					routine.doneOnce = sync.Once{}
+					routine.cancel = cancel
+					m.mu.Lock()
+					m.routines[w.opts.id] = routine
+					m.mu.Unlock()
+					atomic.AddInt64(&m.total, 1)
+					go func(r *goRoutine) {
+						defer workPool.deallocateWork(w)
+						w.fn(routine)
+						r.done()
+					}(routine)
+				})
 			}
-			if w.opts.id == "" {
-				w.opts.id = genUUID()
-			}
-			ctx, cancel := context.WithCancel(m.ctx)
-			if w.opts.key != nil && w.opts.val != nil {
-				ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
-			}
-			if w.opts.timeout != nil {
-				ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
-			}
-			if w.opts.deadline != nil {
-				ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
-			}
-			now := time.Now()
-			ctx = pprof.WithLabels(ctx, pprof.Labels(
-				"id", w.opts.id,
-				"tags", strings.Join(w.opts.tags, " "),
-				"machine_id", m.id,
-				"start", now.String(),
-			))
-			routine := routinePool.allocateRoutine()
-			routine.machine = m
-			routine.ctx = ctx
-			routine.id = w.opts.id
-			routine.tags = w.opts.tags
-			routine.start = now
-			routine.doneOnce = sync.Once{}
-			routine.cancel = cancel
-			m.mu.Lock()
-			m.routines[w.opts.id] = routine
-			m.mu.Unlock()
-			atomic.AddInt64(&m.total, 1)
-			go func(r *goRoutine) {
-				defer workPool.deallocateWork(w)
-				pprof.SetGoroutineLabels(ctx)
-				w.fn(routine)
-				r.done()
-			}(routine)
 		}
-	}
+	})
 }
 
 // Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.

@@ -1,8 +1,6 @@
 package machine
 
 import (
-	"io"
-	"runtime/pprof"
 	"time"
 )
 
@@ -77,7 +75,6 @@ type option struct {
 	val         interface{}
 	timeout     time.Duration
 	deadline    time.Time
-	pprof       bool
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -155,12 +152,5 @@ func WithDeadline(deadline time.Time) Opt {
 func WithID(id string) Opt {
 	return func(o *option) {
 		o.id = id
-	}
-}
-
-func WithProfiling(w io.Writer) Opt {
-	return func(o *option) {
-		o.pprof = true
-		pprof.StartCPUProfile(w)
 	}
 }

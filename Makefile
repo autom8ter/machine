@@ -18,3 +18,6 @@ coverage: ## show test coverage
 
 gen: ## generate docs
 	@go generate ./...
+
+pprof: ## analyze a file with pprof
+	go tool pprof $(file)
