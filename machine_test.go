@@ -3,6 +3,7 @@ package machine
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
@@ -14,12 +15,15 @@ func Test(t *testing.T) {
 }
 
 func runE2ETest(t *testing.T) {
+	prof, _ := os.Create("testing.e2e.prof")
+	defer prof.Close()
 	m := New(context.Background(),
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
 		WithValue("testing", true),
 		WithDeadline(time.Now().Add(5*time.Second)),
 		WithTags([]string{"root"}),
+		WithProfiling(prof),
 	)
 	defer m.Close()
 	channelName := "acme.com"

@@ -36,6 +36,7 @@ type Machine struct {
 	total       int64
 	timeout     time.Duration
 	deadline    time.Time
+	profiling   bool
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -93,6 +94,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		total:       0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
+		profiling:   opts.pprof,
 	}
 	go m.serve()
 	return m
@@ -175,7 +177,6 @@ func (m *Machine) serve() {
 				"machine_id", m.id,
 				"start", now.String(),
 			))
-			pprof.Do()
 			routine := routinePool.allocateRoutine()
 			routine.machine = m
 			routine.ctx = ctx
@@ -208,6 +209,9 @@ func (m *Machine) Wait() {
 		child.Wait()
 	}
 	for m.Active() > 0 {
+	}
+	if m.profiling {
+		pprof.StopCPUProfile()
 	}
 }
 

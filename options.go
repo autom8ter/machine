@@ -1,6 +1,8 @@
 package machine
 
 import (
+	"io"
+	"runtime/pprof"
 	"time"
 )
 
@@ -153,5 +155,12 @@ func WithDeadline(deadline time.Time) Opt {
 func WithID(id string) Opt {
 	return func(o *option) {
 		o.id = id
+	}
+}
+
+func WithProfiling(w io.Writer) Opt {
+	return func(o *option) {
+		o.pprof = true
+		pprof.StartCPUProfile(w)
 	}
 }
