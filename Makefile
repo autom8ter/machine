@@ -8,10 +8,10 @@ help:
 	@echo "----------------------------------------------------------------"
 
 bench-tests: ## run benchmarks
-	go test -v -bench=.
+	go test -v -race -bench=.
 
 unit-tests: ## run unit tests
-	go test -cover -v -coverprofile cover.out .
+	go test -cover -v -coverprofile cover.out -race .
 
 coverage: ## show test coverage
 	go tool cover -func cover.out

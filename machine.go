@@ -17,24 +17,23 @@ type Machine struct {
 	id          string
 	parent      *Machine
 	children    map[string]*Machine
-	childMu     sync.RWMutex
+	childMu     *sync.RWMutex
 	done        chan struct{}
 	cancel      func()
 	middlewares []Middleware
 	ctx         context.Context
 	workQueue   chan *work
-	mu          sync.RWMutex
+	mu          *sync.RWMutex
 	routines    map[string]Routine
 	tags        []string
 	max         int
-	closeOnce   sync.Once
-	doneOnce    sync.Once
+	closeOnce   *sync.Once
+	doneOnce    *sync.Once
 	pubsub      PubSub
 	cache       Cache
 	total       int64
 	timeout     *time.Duration
 	deadline    *time.Time
-	interupt    chan os.Signal
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -51,9 +50,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 			subscriptions: map[string]map[int]chan interface{}{},
 			subMu:         sync.RWMutex{},
 		}
-	}
-	if opts.cache == nil {
-		opts.cache = newCache()
 	}
 	if opts.key != nil && opts.val != nil {
 		ctx = context.WithValue(ctx, opts.key, opts.val)
@@ -72,28 +68,29 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	for _, c := range opts.children {
 		children[c.id] = c
 	}
+	if opts.cache == nil {
+		opts.cache = newCache(ctx, time.NewTicker(5*time.Minute))
+	}
 	m := &Machine{
 		id:          opts.id,
-		parent:      opts.parent,
 		children:    children,
-		childMu:     sync.RWMutex{},
+		childMu:     &sync.RWMutex{},
 		done:        make(chan struct{}, 1),
 		cancel:      cancel,
 		middlewares: opts.middlewares,
 		ctx:         ctx,
-		workQueue:   make(chan *work),
-		mu:          sync.RWMutex{},
+		workQueue:   make(chan *work, 5),
+		mu:          &sync.RWMutex{},
 		routines:    map[string]Routine{},
 		tags:        opts.tags,
 		max:         opts.maxRoutines,
-		closeOnce:   sync.Once{},
-		doneOnce:    sync.Once{},
+		closeOnce:   &sync.Once{},
+		doneOnce:    &sync.Once{},
 		pubsub:      opts.pubsub,
 		cache:       opts.cache,
 		total:       0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
-		interupt:    make(chan os.Signal, 1),
 	}
 	go m.serve()
 	return m
@@ -137,13 +134,16 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
-	signal.Notify(m.interupt, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(m.interupt)
+	interupt := make(chan os.Signal, 1)
+	signal.Notify(interupt, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(interupt)
 	for {
 		select {
-		case <-m.interupt:
+		case <-interupt:
 			m.Cancel()
+			return
 		case <-m.done:
+			m.Cancel()
 			return
 		case w := <-m.workQueue:
 			for _, ware := range w.opts.middlewares {
@@ -181,10 +181,10 @@ func (m *Machine) serve() {
 			m.routines[w.opts.id] = routine
 			m.mu.Unlock()
 			atomic.AddInt64(&m.total, 1)
-			go func() {
-				defer routine.done()
+			go func(r *goRoutine) {
+				defer r.done()
 				w.fn(routine)
-			}()
+			}(routine)
 		}
 	}
 }
@@ -195,12 +195,10 @@ func (m *Machine) Wait() {
 	for m.Total() < 1 {
 
 	}
+	for _, child := range m.children {
+		child.Wait()
+	}
 	for m.Active() > 0 {
-		for len(m.workQueue) > 0 {
-		}
-		for _, child := range m.children {
-			child.Wait()
-		}
 	}
 }
 
@@ -261,7 +259,7 @@ func (m *Machine) Close() {
 		}
 		m.done <- struct{}{}
 		m.pubsub.Close()
-		m.Cache().Close()
+		m.cache.Close()
 	})
 }
 

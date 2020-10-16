@@ -34,8 +34,8 @@ func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg
 	p.subMu.Unlock()
 	defer func() {
 		p.subMu.Lock()
-		defer p.subMu.Unlock()
 		delete(p.subscriptions[channel], subId)
+		p.subMu.Unlock()
 	}()
 	for {
 		select {
@@ -48,10 +48,10 @@ func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg
 }
 
 func (p *pubSub) Publish(channel string, obj interface{}) error {
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
 	if p.subscriptions[channel] == nil {
-		p.subMu.Lock()
 		p.subscriptions[channel] = map[int]chan interface{}{}
-		p.subMu.Unlock()
 	}
 	channelSubscribers := p.subscriptions[channel]
 	for _, input := range channelSubscribers {

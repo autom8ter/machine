@@ -66,7 +66,6 @@ type option struct {
 	id string
 	// MaxRoutines throttles goroutines at the given count
 	maxRoutines int
-	parent      *Machine
 	children    []*Machine
 	middlewares []Middleware
 	pubsub      PubSub

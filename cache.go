@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -17,66 +18,89 @@ type Cache interface {
 	Range(namespace string, f func(key, value interface{}) bool)
 	// Delete deletes the key and its value from the given namespace.
 	Delete(namespace string, key interface{})
-	// Sync performs any cleanup/sync operations like garbage collection & persistance
-	Sync()
+
+	Len(namespace string) int
 	// Close closes the Cache and frees up resources.
 	Close()
 }
 
-func newCache() Cache {
-	return &namespacedCache{
-		mu:       sync.RWMutex{},
-		cacheMap: map[string]*cache{},
+func newCache(ctx context.Context, ticker *time.Ticker) Cache {
+	child, cancel := context.WithCancel(ctx)
+	n := &namespacedCache{
+		cacheMap:  map[string]*cache{},
+		mu:        &sync.RWMutex{},
+		closeOnce: &sync.Once{},
+		cancel:    cancel,
 	}
+	go func() {
+		defer cancel()
+		defer ticker.Stop()
+		for {
+			select {
+			case <-child.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				n.Sync()
+			}
+		}
+	}()
+	return n
 }
 
 type namespacedCache struct {
-	mu       sync.RWMutex
-	cacheMap map[string]*cache
+	cacheMap  map[string]*cache
+	mu        *sync.RWMutex
+	closeOnce *sync.Once
+	cancel    func()
 }
 
-func (n *namespacedCache) initNamespace(namespace string) {
-	if n.cacheMap == nil {
-		n.mu.Lock()
-		n.cacheMap = map[string]*cache{}
-		n.mu.Unlock()
+func (n *namespacedCache) Len(namespace string) int {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	if c, ok := n.cacheMap[namespace]; ok {
+		return c.Len()
 	}
-	if _, ok := n.cacheMap[namespace]; !ok {
-		n.mu.Lock()
-		n.cacheMap[namespace] = &cache{
-			items: sync.Map{},
-			once:  sync.Once{},
-		}
-		n.mu.Unlock()
-	}
+	return 0
 }
 
 func (n *namespacedCache) Get(namespace string, key interface{}) (interface{}, bool) {
-	n.initNamespace(namespace)
 	n.mu.RLock()
 	defer n.mu.RUnlock()
-	return n.cacheMap[namespace].Get(key)
+	if c, ok := n.cacheMap[namespace]; ok {
+		return c.Get(key)
+	}
+	return nil, false
 }
 
 func (n *namespacedCache) Set(namespace string, key interface{}, value interface{}, duration time.Duration) {
-	n.initNamespace(namespace)
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	n.cacheMap[namespace].Set(key, value, duration)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if _, ok := n.cacheMap[namespace]; !ok {
+		n.cacheMap[namespace] = &cache{
+			data: &sync.Map{},
+			once: &sync.Once{},
+		}
+	}
+	if c, ok := n.cacheMap[namespace]; ok {
+		c.Set(key, value, duration)
+	}
 }
 
 func (n *namespacedCache) Range(namespace string, f func(key interface{}, value interface{}) bool) {
-	n.initNamespace(namespace)
 	n.mu.RLock()
 	defer n.mu.RUnlock()
-	n.cacheMap[namespace].Range(f)
+	if c, ok := n.cacheMap[namespace]; ok {
+		c.Range(f)
+	}
 }
 
 func (n *namespacedCache) Delete(namespace string, key interface{}) {
-	n.initNamespace(namespace)
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	n.cacheMap[namespace].Delete(key)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if c, ok := n.cacheMap[namespace]; ok {
+		c.Delete(key)
+	}
 }
 
 func (n *namespacedCache) Sync() {
@@ -88,17 +112,22 @@ func (n *namespacedCache) Sync() {
 }
 
 func (n *namespacedCache) Close() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for _, c := range n.cacheMap {
-		c.Close()
-	}
-	n.cacheMap = map[string]*cache{}
+	n.closeOnce.Do(func() {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		if n.cancel != nil {
+			n.cancel()
+		}
+		for _, c := range n.cacheMap {
+			c.Close()
+		}
+		n.cacheMap = map[string]*cache{}
+	})
 }
 
 type cache struct {
-	items sync.Map
-	once  sync.Once
+	data *sync.Map
+	once *sync.Once
 }
 
 type item struct {
@@ -107,20 +136,18 @@ type item struct {
 }
 
 func (c *cache) Sync() {
-	now := time.Now().UnixNano()
-	c.items.Range(func(key, value interface{}) bool {
+	c.data.Range(func(key, value interface{}) bool {
+		now := time.Now().UnixNano()
 		item := value.(item)
-
 		if item.expires > 0 && now > item.expires {
-			c.items.Delete(key)
+			c.data.Delete(key)
 		}
-
 		return true
 	})
 }
 
 func (c *cache) Get(key interface{}) (interface{}, bool) {
-	obj, exists := c.items.Load(key)
+	obj, exists := c.data.Load(key)
 
 	if !exists {
 		return nil, false
@@ -142,7 +169,7 @@ func (c *cache) Set(key interface{}, value interface{}, duration time.Duration) 
 		expires = time.Now().Add(duration).UnixNano()
 	}
 
-	c.items.Store(key, item{
+	c.data.Store(key, item{
 		data:    value,
 		expires: expires,
 	})
@@ -150,7 +177,7 @@ func (c *cache) Set(key interface{}, value interface{}, duration time.Duration) 
 
 func (c *cache) Range(f func(key, value interface{}) bool) {
 	now := time.Now().UnixNano()
-	c.items.Range(func(key, value interface{}) bool {
+	c.data.Range(func(key, value interface{}) bool {
 		item := value.(item)
 
 		if item.expires > 0 && now > item.expires {
@@ -162,12 +189,21 @@ func (c *cache) Range(f func(key, value interface{}) bool) {
 }
 
 func (c *cache) Delete(key interface{}) {
-	c.items.Delete(key)
+	c.data.Delete(key)
+}
+
+func (c *cache) Len() int {
+	i := 0
+	c.data.Range(func(key, value interface{}) bool {
+		i++
+		return true
+	})
+	return i
 }
 
 func (c *cache) Close() {
 	c.once.Do(func() {
 		c.Sync()
-		c.items = sync.Map{}
+		c.data = &sync.Map{}
 	})
 }

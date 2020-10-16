@@ -17,12 +17,13 @@ func Benchmark(b *testing.B) {
 	b.Run("benchmarkGoSleep", func(b *testing.B) {
 		benchmarkGoSleep(b, 100*time.Nanosecond)
 	})
+	b.Run("benchSetCache", benchSetCache)
 }
 
 //
 func benchmarkGoSleep(b *testing.B, sleep time.Duration) {
 	b.ReportAllocs()
-	m := New(context.Background(), WithMaxRoutines(3))
+	m := New(context.Background(), WithMaxRoutines(100))
 	defer m.Close()
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine Routine) {
@@ -34,7 +35,6 @@ func benchmarkGoSleep(b *testing.B, sleep time.Duration) {
 }
 
 func runE2ETest(t *testing.T) {
-	t.Parallel()
 	m := New(context.Background(),
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
@@ -74,13 +74,11 @@ func runE2ETest(t *testing.T) {
 	)
 	m2 := m.Sub(WithMaxRoutines(3))
 	defer m2.Close()
-	var seenCron = false
 
 	m2.Go(func(routine Routine) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		seenCron = true
 		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron1"),
@@ -93,7 +91,6 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		seenCron = true
 		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron2"),
@@ -106,7 +103,6 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		seenCron = true
 		t.Logf("cron3 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron3"),
@@ -124,9 +120,6 @@ func runE2ETest(t *testing.T) {
 	if m.Active() != 0 {
 		t.Fatalf("expected active to be zero, got: %v", m.Active())
 	}
-	if !seenCron {
-		t.Fatalf("expected to have received cron msg")
-	}
 	if !seen {
 		t.Fatalf("expected to have received subscription msg")
 	}
@@ -134,7 +127,6 @@ func runE2ETest(t *testing.T) {
 }
 
 func runStatsTest(t *testing.T) {
-	t.Parallel()
 	m := New(
 		context.Background(),
 		WithTimeout(3*time.Second),
@@ -164,7 +156,7 @@ func runStatsTest(t *testing.T) {
 func runCacheTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	m.Cache().Set("config", "env", "testing", 5*time.Minute)
+	m.Cache().Set("config", "env", "testing", 5*time.Second)
 	val, ok := m.Cache().Get("config", "env")
 	if !ok {
 		t.Fatal("key not found")
@@ -172,10 +164,29 @@ func runCacheTest(t *testing.T) {
 	if val != "testing" {
 		t.Fatal("incorrect cache value")
 	}
-	m.Cache().Sync()
 	m.Cache().Delete("config", "env")
 	_, ok = m.Cache().Get("config", "env")
 	if ok {
 		t.Fatal("key found after deletion")
 	}
+	m.Cache().Set("config", "env", "testing", 500*time.Millisecond)
+	time.Sleep(1 * time.Second)
+	val, ok = m.Cache().Get("config", "env")
+	if ok {
+		t.Fatal("key found after expiration!")
+	}
+}
+
+func benchSetCache(b *testing.B) {
+	b.ReportAllocs()
+	m := New(context.Background())
+	defer m.Close()
+	for n := 0; n < b.N; n++ {
+		m.Go(func(routine Routine) {
+			m.Cache().Set("testing", fmt.Sprintf("%v", time.Now().UnixNano()), 1, 5*time.Minute)
+		})
+	}
+	b.Logf("active = %v\n", m.Active())
+	b.Logf("cached items = %v\n", m.Cache().Len("testing"))
+	m.Wait()
 }
