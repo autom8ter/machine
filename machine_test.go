@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/pprof"
 	"testing"
 	"time"
 )
@@ -15,15 +16,20 @@ func Test(t *testing.T) {
 }
 
 func runE2ETest(t *testing.T) {
-	prof, _ := os.Create("testing.e2e.prof")
-	defer prof.Close()
+	cpu, err := os.Create("testing.cpu.prof")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cpu.Truncate(0)
+	defer cpu.Close()
+	pprof.StartCPUProfile(cpu)
+	defer pprof.StopCPUProfile()
 	m := New(context.Background(),
 		WithMaxRoutines(10),
 		WithMiddlewares(PanicRecover()),
 		WithValue("testing", true),
 		WithDeadline(time.Now().Add(5*time.Second)),
 		WithTags([]string{"root"}),
-		WithProfiling(prof),
 	)
 	defer m.Close()
 	channelName := "acme.com"
@@ -34,6 +40,7 @@ func runE2ETest(t *testing.T) {
 		}
 		if err := routine.Subscribe(channelName, func(obj interface{}) {
 			seen = true
+			
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
 		}); err != nil {
 			t.Fatal(err)
@@ -44,6 +51,7 @@ func runE2ETest(t *testing.T) {
 			t.Fatal("expected testing = true in context")
 		}
 		msg := "hey there bud!"
+		
 		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
 		if err := routine.Publish(channelName, msg); err != nil {
 			t.Fatal(err)
@@ -62,6 +70,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
+		
 		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron1"),
@@ -74,6 +83,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
+		
 		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron2"),
