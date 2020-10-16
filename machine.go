@@ -121,15 +121,13 @@ func (m *Machine) Cache() Cache {
 // Go calls the given function in a new goroutine.
 // it is passed information about the goroutine at runtime via the Routine interface
 func (m *Machine) Go(fn Func, opts ...GoOpt) {
-	o := &goOpts{}
-	for _, opt := range opts {
-		opt(o)
-	}
 	if m.ctx.Err() == nil {
-		m.workQueue <- &work{
-			opts: o,
-			fn:   fn,
+		w := workPool.allocateWork()
+		for _, opt := range opts {
+			opt(w.opts)
 		}
+		w.fn = fn
+		m.workQueue <- w
 	}
 }
 
@@ -181,6 +179,7 @@ func (m *Machine) serve() {
 			m.mu.Unlock()
 			atomic.AddInt64(&m.total, 1)
 			go func(r *goRoutine) {
+				defer workPool.deallocateWork(w)
 				w.fn(routine)
 				r.done()
 			}(routine)

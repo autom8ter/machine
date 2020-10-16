@@ -1,12 +1,18 @@
 package machine
 
 import (
-	"reflect"
 	"sync"
 )
 
 var routinePool = &pooledRoutines{pool: sync.Pool{New: func() interface{} {
 	return new(goRoutine)
+}}}
+
+var workPool = &pooledWork{pool: sync.Pool{New: func() interface{} {
+	return &work{
+		opts: &goOpts{},
+		fn:   nil,
+	}
 }}}
 
 type pooledRoutines struct {
@@ -18,11 +24,20 @@ func (p *pooledRoutines) allocateRoutine() *goRoutine {
 }
 
 func (p *pooledRoutines) deallocateRoutine(routine *goRoutine) {
-	reset(routine)
+	*routine = goRoutine{}
 	p.pool.Put(routine)
 }
 
-func reset(v interface{}) {
-	e := reflect.ValueOf(v).Elem()
-	e.Set(reflect.Zero(e.Type()))
+type pooledWork struct {
+	pool sync.Pool
+}
+
+func (p *pooledWork) allocateWork() *work {
+	return p.pool.Get().(*work)
+}
+
+func (p *pooledWork) deallocateWork(w *work) {
+	*w.opts = goOpts{}
+	w.fn = nil
+	p.pool.Put(w)
 }
