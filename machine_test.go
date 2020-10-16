@@ -40,7 +40,7 @@ func runE2ETest(t *testing.T) {
 		}
 		if err := routine.Subscribe(channelName, func(obj interface{}) {
 			seen = true
-			
+
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
 		}); err != nil {
 			t.Fatal(err)
@@ -51,7 +51,7 @@ func runE2ETest(t *testing.T) {
 			t.Fatal("expected testing = true in context")
 		}
 		msg := "hey there bud!"
-		
+
 		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
 		if err := routine.Publish(channelName, msg); err != nil {
 			t.Fatal(err)
@@ -70,7 +70,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		
+
 		t.Logf("cron1 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron1"),
@@ -83,7 +83,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		
+
 		t.Logf("cron2 stats= %s\n", routine.Machine().Stats().String())
 	},
 		GoWithTags("cron2"),
