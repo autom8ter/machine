@@ -178,6 +178,7 @@ func BenchmarkGo(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		m.Go(func(routine Routine) {
 			//time.Sleep(100 *time.Millisecond)
+			routine.TraceLog("here")
 			return
 		})
 	}

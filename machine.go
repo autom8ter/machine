@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/pprof"
+	"runtime/trace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,6 +38,7 @@ type Machine struct {
 	finished    int64
 	timeout     time.Duration
 	deadline    time.Time
+	task        *trace.Task
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -74,6 +76,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	if opts.cache == nil {
 		opts.cache = newCache(ctx, time.NewTicker(5*time.Minute))
 	}
+	ctx, tsk := trace.NewTask(ctx, opts.id)
 	m := &Machine{
 		id:          opts.id,
 		children:    children,
@@ -95,6 +98,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		finished:    0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
+		task:        tsk,
 	}
 	pprof.Do(ctx, pprof.Labels(
 		"machine_id", m.id,
@@ -154,54 +158,59 @@ func (m *Machine) serve() {
 			m.Cancel()
 			return
 		case w := <-m.workQueue:
-			for _, ware := range w.opts.middlewares {
-				w.fn = ware(w.fn)
-			}
-			for _, ware := range m.middlewares {
-				w.fn = ware(w.fn)
-			}
-			for x := m.Active(); x >= m.max; x = m.Active() {
+			trace.WithRegion(ctx, "queue-wait", func() {
+				for _, ware := range w.opts.middlewares {
+					w.fn = ware(w.fn)
+				}
+				for _, ware := range m.middlewares {
+					w.fn = ware(w.fn)
+				}
+				for x := m.Active(); x >= m.max; x = m.Active() {
 
-			}
-			atomic.AddInt64(&m.started, 1)
-			if w.opts.id == "" {
-				w.opts.id = genUUID()
-			}
-			now := time.Now()
-			tags := strings.Join(w.opts.tags, " ")
-			pprof.Do(ctx, pprof.Labels(
-				"routine_id", w.opts.id,
-				"routine_tags", tags,
-				"routine_start", now.String(),
-			), func(ctx context.Context) {
-				ctx, cancel := context.WithCancel(ctx)
-				if w.opts.key != nil && w.opts.val != nil {
-					ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
 				}
-				if w.opts.timeout != nil {
-					ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
+			})
+			trace.WithRegion(ctx, "queue-accept", func() {
+				atomic.AddInt64(&m.started, 1)
+				if w.opts.id == "" {
+					w.opts.id = genUUID()
 				}
-				if w.opts.deadline != nil {
-					ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
-				}
-
-				routine := routinePool.allocateRoutine()
-				routine.machine = m
-				routine.ctx = ctx
-				routine.id = w.opts.id
-				routine.tags = w.opts.tags
-				routine.start = now
-				routine.doneOnce = sync.Once{}
-				routine.cancel = cancel
-				m.mu.Lock()
-				m.routines[w.opts.id] = routine
-				m.mu.Unlock()
-				go func(r *goRoutine) {
-					defer atomic.AddInt64(&m.finished, 1)
-					defer workPool.deallocateWork(w)
-					w.fn(r)
-					r.done()
-				}(routine)
+				now := time.Now()
+				tags := strings.Join(w.opts.tags, " ")
+				pprof.Do(ctx, pprof.Labels(
+					"routine_id", w.opts.id,
+					"routine_tags", tags,
+					"routine_start", now.String(),
+				), func(ctx context.Context) {
+					ctx, cancel := context.WithCancel(ctx)
+					if w.opts.key != nil && w.opts.val != nil {
+						ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
+					}
+					if w.opts.timeout != nil {
+						ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
+					}
+					if w.opts.deadline != nil {
+						ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
+					}
+					routine := routinePool.allocateRoutine()
+					routine.machine = m
+					routine.ctx = ctx
+					routine.id = w.opts.id
+					routine.tags = w.opts.tags
+					routine.start = now
+					routine.doneOnce = sync.Once{}
+					routine.cancel = cancel
+					m.mu.Lock()
+					m.routines[w.opts.id] = routine
+					m.mu.Unlock()
+					go func(r *goRoutine) {
+						defer atomic.AddInt64(&m.finished, 1)
+						defer workPool.deallocateWork(w)
+						trace.WithRegion(ctx, tags, func() {
+							w.fn(r)
+							r.done()
+						})
+					}(routine)
+				})
 			})
 		}
 	}
@@ -280,6 +289,7 @@ func (m *Machine) Close() {
 		m.pubsub.Close()
 		m.cache.Close()
 	})
+	m.task.End()
 }
 
 // Sub returns a nested Machine instance that is dependent on the parent machine's context.

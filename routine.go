@@ -2,6 +2,9 @@ package machine
 
 import (
 	"context"
+	"fmt"
+	"runtime/trace"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,6 +27,8 @@ type Routine interface {
 	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
 	Subscribe(channel string, handler func(obj interface{})) error
+	// TraceLog logs a message within the goroutine execution tracer. ref: https://golang.org/pkg/runtime/trace/#example_
+	TraceLog(message string)
 	// Machine returns the underlying routine's machine instance
 	Machine() *Machine
 }
@@ -82,4 +87,8 @@ func (g *goRoutine) done() {
 		g.machine.mu.Unlock()
 	})
 	routinePool.deallocateRoutine(g)
+}
+
+func (g *goRoutine) TraceLog(message string) {
+	trace.Logf(g.ctx, strings.Join(g.tags, " "), fmt.Sprintf("%s %s", g.PID(), message))
 }
