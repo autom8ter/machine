@@ -33,10 +33,10 @@ type Machine struct {
 	doneOnce    sync.Once
 	pubsub      PubSub
 	cache       Cache
-	total       int64
+	started     int64
+	finished    int64
 	timeout     time.Duration
 	deadline    time.Time
-	profiling   bool
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -91,7 +91,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
 		cache:       opts.cache,
-		total:       0,
+		started:     0,
+		finished:    0,
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
 	}
@@ -107,14 +108,12 @@ func New(ctx context.Context, options ...Opt) *Machine {
 
 // Active returns current active managed goroutine count
 func (p *Machine) Active() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return len(p.routines)
+	return int(atomic.LoadInt64(&p.started) - atomic.LoadInt64(&p.finished))
 }
 
-// Total returns total goroutines that have been executed by the machine
+// Total returns total goroutines that have been fully executed by the machine
 func (p *Machine) Total() int {
-	return int(atomic.LoadInt64(&p.total))
+	return int(atomic.LoadInt64(&p.finished))
 }
 
 // Tags returns the machine's tags
@@ -141,6 +140,8 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) {
 }
 
 func (m *Machine) serve() {
+	ctx, cancel := context.WithCancel(m.ctx)
+	defer cancel()
 	interupt := make(chan os.Signal, 1)
 	signal.Notify(interupt, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interupt)
@@ -162,16 +163,18 @@ func (m *Machine) serve() {
 			for x := m.Active(); x >= m.max; x = m.Active() {
 
 			}
+			atomic.AddInt64(&m.started, 1)
 			if w.opts.id == "" {
 				w.opts.id = genUUID()
 			}
 			now := time.Now()
-			pprof.Do(m.ctx, pprof.Labels(
+			tags := strings.Join(w.opts.tags, " ")
+			pprof.Do(ctx, pprof.Labels(
 				"routine_id", w.opts.id,
-				"routine_tags", strings.Join(w.opts.tags, " "),
+				"routine_tags", tags,
 				"routine_start", now.String(),
-			), func(child context.Context) {
-				ctx, cancel := context.WithCancel(child)
+			), func(ctx context.Context) {
+				ctx, cancel := context.WithCancel(ctx)
 				if w.opts.key != nil && w.opts.val != nil {
 					ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
 				}
@@ -181,6 +184,7 @@ func (m *Machine) serve() {
 				if w.opts.deadline != nil {
 					ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
 				}
+
 				routine := routinePool.allocateRoutine()
 				routine.machine = m
 				routine.ctx = ctx
@@ -192,10 +196,10 @@ func (m *Machine) serve() {
 				m.mu.Lock()
 				m.routines[w.opts.id] = routine
 				m.mu.Unlock()
-				atomic.AddInt64(&m.total, 1)
 				go func(r *goRoutine) {
+					defer atomic.AddInt64(&m.finished, 1)
 					defer workPool.deallocateWork(w)
-					w.fn(routine)
+					w.fn(r)
 					r.done()
 				}(routine)
 			})
@@ -212,10 +216,8 @@ func (m *Machine) Wait() {
 	for _, child := range m.children {
 		child.Wait()
 	}
+
 	for m.Active() > 0 {
-	}
-	if m.profiling {
-		pprof.StopCPUProfile()
 	}
 }
 
