@@ -29,7 +29,7 @@ func runE2ETest(t *testing.T) {
 		WithMiddlewares(PanicRecover()),
 		WithValue("testing", true),
 		WithDeadline(time.Now().Add(5*time.Second)),
-		WithTags([]string{"root"}),
+		WithTags("root"),
 	)
 	defer m.Close()
 	channelName := "acme.com"

@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,19 +35,15 @@ func main() {
 	}
 	targetAddr, err := net.ResolveTCPAddr("tcp", target)
 	if err != nil {
-		logger.Warn("failed to resolve target", zap.Error(err))
+		logger.Error("failed to resolve target", zap.Error(err))
 		return
 	}
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
-	if err != nil {
-		logger.Warn("failed to listen", zap.Error(err))
-		return
-	}
-	defer lis.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mach := machine.New(ctx)
+	mach := machine.New(ctx,
+		machine.WithTags([]string{"reverse-proxy"}),
+	)
 
 	pending := make(chan net.Conn, 100)
 	mach.Go(func(routine machine.Routine) {
@@ -60,7 +58,7 @@ func main() {
 				mach.Go(func(routine machine.Routine) {
 					targetConn, err := net.DialTCP("tcp", nil, targetAddr)
 					if err != nil {
-						logger.Warn("failed to dial target", zap.Error(err))
+						logger.Error("failed to dial target", zap.Error(err))
 						return
 					}
 					targetConn.SetWriteBuffer(1024)
@@ -78,13 +76,13 @@ func main() {
 									if err == io.EOF {
 										return
 									} else {
-										logger.Warn("streaming to target error", zap.Error(err))
+										logger.Error("streaming to target error", zap.Error(err))
 										continue
 									}
 								}
 							}
 						}
-					})
+					}, machine.GoWithTags("stream-from-client-to-target"))
 					routine.Machine().Go(func(routine machine.Routine) {
 						for {
 							select {
@@ -97,27 +95,47 @@ func main() {
 								if err == io.EOF {
 									return
 								} else {
-									logger.Warn("streaming from target error", zap.Error(err))
+									logger.Error("streaming from target error", zap.Error(err))
 									continue
 								}
 							}
 						}
-					})
-				})
+					}, machine.GoWithTags("stream-from-target-to-client"))
+				}, machine.GoWithTags("stream"))
 			}
 		}
 	})
-	logger.Info("starting tcp listener",
-		zap.String("addr", lis.Addr().String()),
-		zap.String("target", target),
-	)
+	httpLis, err := net.Listen("tcp", fmt.Sprintf(":%v", port+1))
+	if err != nil {
+		logger.Error("failed to listen http", zap.Error(err))
+		return
+	}
+	tcpLis, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
+	if err != nil {
+		logger.Error("failed to listen tcp", zap.Error(err))
+		return
+	}
+	httpServer := &http.Server{Handler: http.DefaultServeMux}
 	mach.Go(func(routine machine.Routine) {
+		logger.Info("starting http server",
+			zap.String("addr", fmt.Sprintf(":%v", port+1)),
+		)
+		if err := httpServer.Serve(httpLis); err != nil && err != http.ErrServerClosed {
+			logger.Warn("http server failure", zap.Error(err))
+		}
+	}, machine.GoWithTags("http-server"))
+
+	mach.Go(func(routine machine.Routine) {
+		logger.Info("starting tcp server",
+			zap.String("addr", tcpLis.Addr().String()),
+			zap.String("target", target),
+		)
 		for {
 			select {
 			case <-routine.Context().Done():
 				return
 			default:
-				conn, err := lis.Accept()
+				conn, err := tcpLis.Accept()
 				if err != nil {
 					if opErr, ok := err.(*net.OpError); ok {
 						if opErr.Timeout() {
@@ -125,7 +143,7 @@ func main() {
 						}
 					}
 					if routine.Context().Err() == nil {
-						logger.Warn("tcp listener error", zap.Error(err))
+						logger.Error("tcp listener error", zap.Error(err))
 					}
 					return
 				}
@@ -134,7 +152,7 @@ func main() {
 				}
 			}
 		}
-	})
+	}, machine.GoWithTags("tcp-server"))
 	interrupt := make(chan os.Signal, 1)
 
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
@@ -146,8 +164,9 @@ func main() {
 	case <-ctx.Done():
 		break
 	}
-	logger.Warn("shutdown signal received")
+	logger.Error("shutdown signal received")
 	cancel()
-	lis.Close()
+	tcpLis.Close()
+	httpLis.Close()
 	mach.Wait()
 }

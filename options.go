@@ -120,7 +120,7 @@ func WithMiddlewares(middlewares ...Middleware) Opt {
 }
 
 // WithTags sets the machine instances tags
-func WithTags(tags []string) Opt {
+func WithTags(tags ...string) Opt {
 	return func(o *option) {
 		o.tags = append(o.tags, tags...)
 	}
