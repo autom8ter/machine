@@ -74,7 +74,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		children[c.id] = c
 	}
 	if opts.cache == nil {
-		opts.cache = newCache(ctx, time.NewTicker(5*time.Minute))
+		opts.cache = newCache()
 	}
 	ctx, tsk := trace.NewTask(ctx, opts.id)
 	m := &Machine{

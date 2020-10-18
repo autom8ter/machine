@@ -149,37 +149,26 @@ func runStatsTest(t *testing.T) {
 func runCacheTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	m.Cache().Set("config", "env", "testing", 5*time.Second)
-	if !m.Cache().Exists("config", "env") {
+	m.Cache().Set("testing", "testing", 1)
+	if !m.Cache().Exists("testing", "testing") {
 		t.Fatal("expected key to exist")
 	}
-	bits, err := m.Cache().Raw("config").Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(string(bits))
-	m.Cache().Raw("config").Range(func(k, v interface{}) bool {
+	m.Cache().Map("testing").Range(func(k, v interface{}) bool {
 		t.Logf("%v = %v\n", k, v)
 		return true
 	})
 
-	val, ok := m.Cache().Get("config", "env")
+	val, ok := m.Cache().Get("testing", "testing")
 	if !ok {
 		t.Fatal("key not found")
 	}
-	if val != "testing" {
+	if val != 1 {
 		t.Fatal("incorrect cache value")
 	}
 	m.Cache().Delete("config", "env")
 	_, ok = m.Cache().Get("config", "env")
 	if ok {
 		t.Fatal("key found after deletion")
-	}
-	m.Cache().Set("config", "env", "testing", 500*time.Millisecond)
-	time.Sleep(1 * time.Second)
-	val, ok = m.Cache().Get("config", "env")
-	if ok {
-		t.Fatal("key found after expiration!")
 	}
 }
 
@@ -204,7 +193,18 @@ func BenchmarkSetCache(b *testing.B) {
 	defer m.Close()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		m.Cache().Set("testing", n, 1, 5*time.Minute)
+		namespace := fmt.Sprint(n)
+		m.Cache().Set(namespace, n, 1)
+		if !m.Cache().Exists(namespace, n) {
+			b.Fatalf("failed to get: %v", n)
+		}
+		val, ok := m.Cache().Get(namespace, n)
+		if !ok {
+			b.Fatalf("failed to get: %v", n)
+		}
+		if val != 1 {
+			b.Fatalf("expected 1 got: %v", val)
+		}
 	}
-	b.Logf("cached items = %v\n", m.Cache().Len("testing"))
+	b.Logf("total namespaces = %v\n", len(m.Cache().Namespaces()))
 }
