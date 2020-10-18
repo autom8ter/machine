@@ -206,5 +206,13 @@ func BenchmarkSetCache(b *testing.B) {
 			b.Fatalf("expected 1 got: %v", val)
 		}
 	}
-	b.Logf("total namespaces = %v\n", len(m.Cache().Namespaces()))
+	for _, namespace := range m.Cache().Namespaces() {
+		b.Logf("namespace = %v entries = %v\n", namespace, m.Cache().Len(namespace))
+		m.Cache().Clear(namespace)
+	}
+	for _, namespace := range m.Cache().Namespaces() {
+		if m.Cache().Len(namespace) != 0 {
+			b.Fatalf("expected zero entries in %v after clear\n", namespace)
+		}
+	}
 }

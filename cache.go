@@ -23,6 +23,8 @@ type Cache interface {
 	Len(namespace string) int
 	// Exists returns whether the key exists within the namespace
 	Exists(namespace string, key interface{}) bool
+	// Clear clears all entries in the given namespace
+	Clear(namespace string)
 	// Copy returns an Map with all of the values in the namespace
 	Copy(namespace string) Map
 	// Filter iterates over all values in the namespace and returns an Map with all of the values in the namespace that the filter returns true for
@@ -157,6 +159,14 @@ func (n *namespacedCache) SetAll(namespace string, m Map) {
 	n.cacheMap[namespace].SetAll(m)
 }
 
+func (n *namespacedCache) Clear(namespace string) {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	if cache, ok := n.cacheMap[namespace]; ok {
+		cache.Clear()
+	}
+}
+
 func (n *namespacedCache) Close() {
 	n.closeOnce.Do(func() {
 		n.mu.Lock()
@@ -289,4 +299,11 @@ func (c *cache) Filter(filter func(k, v interface{}) bool) Map {
 		return true
 	})
 	return data
+}
+
+func (c *cache) Clear() {
+	c.Range(func(key, value interface{}) bool {
+		c.Delete(key)
+		return true
+	})
 }
