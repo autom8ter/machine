@@ -61,6 +61,8 @@ m.Wait()
 
 - "sub" machines for creating a dependency tree between groups of goroutines
 
+- namespaced, concurrency safe cache
+
 - greater than 80% test coverage
 
 - goroutine leak prevention
