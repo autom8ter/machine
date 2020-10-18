@@ -150,6 +150,14 @@ func runCacheTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
 	m.Cache().Set("config", "env", "testing", 5*time.Second)
+	if !m.Cache().Exists("config", "env") {
+		t.Fatal("expected key to exist")
+	}
+	bits, err := m.Cache().Raw("config").Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(string(bits))
 	val, ok := m.Cache().Get("config", "env")
 	if !ok {
 		t.Fatal("key not found")

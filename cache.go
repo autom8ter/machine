@@ -20,6 +20,18 @@ type Cache interface {
 	Delete(namespace string, key interface{})
 	// Len returns total kv pairs within namespace
 	Len(namespace string) int
+	// Exists returns whether the key exists within the namespace
+	Exists(namespace string, key interface{}) bool
+	// Copy returns an Map with all of the values in the namespace
+	Copy(namespace string) Map
+	// Filter iterates over all values in the namespace and returns an Map with all of the values in the namespace that the filter returns true for
+	Filter(namespace string, filter func(k, v interface{}) bool) Map
+	// Intersection returns a Map of all of the values that are within both namespaces
+	Intersection(namespace1, namespace2 string) Map
+	// Union returns a Map with a union of the two namespaces
+	Union(namespace1, namespace2 string) Map
+	// Raw returns every value in the namespace
+	Raw(namespace string) Map
 	// Close closes the Cache and frees up resources.
 	Close()
 }
@@ -109,6 +121,42 @@ func (n *namespacedCache) Sync() {
 	for _, c := range n.cacheMap {
 		c.Sync()
 	}
+}
+
+func (n *namespacedCache) Exists(namespace string, key interface{}) bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace].Exists(key)
+}
+
+func (n *namespacedCache) Copy(namespace string) Map {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace].Copy()
+}
+
+func (n *namespacedCache) Filter(namespace string, filter func(k, v interface{}) bool) Map {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace].Filter(filter)
+}
+
+func (n *namespacedCache) Intersection(namespace1, namespace2 string) Map {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace1].Intersection(n.cacheMap[namespace2])
+}
+
+func (n *namespacedCache) Union(namespace1, namespace2 string) Map {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace1].Union(n.cacheMap[namespace2])
+}
+
+func (n *namespacedCache) Raw(namespace string) Map {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.cacheMap[namespace].Raw()
 }
 
 func (n *namespacedCache) Close() {
@@ -201,9 +249,82 @@ func (c *cache) Len() int {
 	return i
 }
 
+func (c *cache) Exists(key interface{}) bool {
+	_, ok := c.Get(key)
+	return ok
+}
+
 func (c *cache) Close() {
 	c.once.Do(func() {
 		c.Sync()
 		c.data = sync.Map{}
 	})
+}
+
+func (c *cache) Raw() Map {
+	data := make(map[interface{}]interface{})
+	c.Range(func(key, value interface{}) bool {
+		data[key] = value
+		return true
+	})
+	return data
+}
+
+func (c *cache) Intersection(other *cache) Map {
+	data := Map{}
+	if c == nil {
+		return data
+	}
+	if other != nil {
+		c.Range(func(k, v interface{}) bool {
+			if other.Exists(v) {
+				data.Set(k, v)
+			}
+			return true
+		})
+	}
+	return data
+}
+
+func (c *cache) Union(other *cache) Map {
+	data := Map{}
+	if c != nil {
+		c.Range(func(k, v interface{}) bool {
+			data.Set(k, v)
+			return true
+		})
+	}
+	if other != nil {
+		other.Range(func(k, v interface{}) bool {
+			data.Set(k, v)
+			return true
+		})
+	}
+	return data
+}
+
+func (c *cache) Copy() Map {
+	data := Map{}
+	if c == nil {
+		return data
+	}
+	c.Range(func(k, v interface{}) bool {
+		data.Set(k, v)
+		return true
+	})
+	return data
+}
+
+func (c *cache) Filter(filter func(k, v interface{}) bool) Map {
+	data := Map{}
+	if c == nil {
+		return data
+	}
+	c.Range(func(key, value interface{}) bool {
+		if filter(key, value) {
+			data.Set(key, value)
+		}
+		return true
+	})
+	return data
 }
