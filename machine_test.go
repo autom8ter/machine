@@ -158,6 +158,11 @@ func runCacheTest(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(string(bits))
+	m.Cache().Raw("config").Range(func(k, v interface{}) bool {
+		t.Logf("%v = %v\n", k, v)
+		return true
+	})
+
 	val, ok := m.Cache().Get("config", "env")
 	if !ok {
 		t.Fatal("key not found")
