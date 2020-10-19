@@ -63,8 +63,6 @@ m.Wait()
 
 - global, concurrency safe, directed Graph for persisting relational data in memory for use by Routines.
 
-- greater than 80% test coverage
-
 - goroutine leak prevention
 
 ## Use Cases
