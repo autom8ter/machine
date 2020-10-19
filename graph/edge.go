@@ -58,6 +58,33 @@ func (e Edges) Range(fn func(e Edge) bool) {
 	}
 }
 
+// Filter executes the function over every edge. If the function returns true, the edges will be added to the returned array of edges.
+func (e Edges) Filter(fn func(e Edge) bool) []Edge {
+	var edges []Edge
+	for _, m := range e {
+		for _, e := range m {
+			if fn(e) {
+				edges = append(edges, e)
+			}
+		}
+	}
+	return edges
+}
+
+// FilterType executes the function over every edge of the given type. If the function returns true, the edges will be added to the returned array of edges.
+func (e Edges) FilterType(typ string, fn func(e Edge) bool) []Edge {
+	var edges []Edge
+	if e[typ] == nil {
+		return edges
+	}
+	for _, e := range e[typ] {
+		if fn(e) {
+			edges = append(edges, e)
+		}
+	}
+	return edges
+}
+
 // DelEdge deletes the edge
 func (e Edges) DelEdge(id ID) {
 	if _, ok := e[id.Type()]; !ok {
