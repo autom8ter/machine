@@ -61,7 +61,7 @@ m.Wait()
 
 - "sub" machines for creating a dependency tree between groups of goroutines
 
-- namespaced, concurrency safe cache
+- global, concurrency safe, directed Graph for persisting relational data in memory for use by Routines.
 
 - greater than 80% test coverage
 
