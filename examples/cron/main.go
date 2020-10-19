@@ -49,7 +49,7 @@ func main() {
 		os.Setenv(k, v)
 	}
 	m := machine.New(context.Background(),
-		machine.WithTags([]string{c.Name}),
+		machine.WithTags(c.Name),
 		machine.WithMiddlewares(machine.PanicRecover()),
 	)
 	mux := http.NewServeMux()

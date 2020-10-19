@@ -42,7 +42,7 @@ func main() {
 	defer cancel()
 
 	mach := machine.New(ctx,
-		machine.WithTags([]string{"reverse-proxy"}),
+		machine.WithTags("reverse-proxy"),
 	)
 
 	pending := make(chan net.Conn, 100)
