@@ -55,15 +55,18 @@ m.Wait()
 
 - goroutines have IDs and optional tags for easy debugging (see [Stats](https://pkg.go.dev/github.com/autom8ter/machine#Machine.Stats))
 
-- [publish/subscribe](https://pkg.go.dev/github.com/autom8ter/machine#PubSub) to channels for broadcasting messages to active goroutines
+- native [publish/subscribe](https://pkg.go.dev/github.com/autom8ter/machine/pubsub#PubSub) implementation for broadcasting messages to active goroutines
+
+- native global, concurrency safe, directed [graph](https://pkg.go.dev/github.com/autom8ter/machine/graph#Graph) implementation for persisting relational data in memory for use by Routines.
 
 - [middlewares](https://pkg.go.dev/github.com/autom8ter/machine#Middleware) for wrapping/decorating functions
 
 - "sub" machines for creating a dependency tree between groups of goroutines
 
-- global, concurrency safe, directed Graph for persisting relational data in memory for use by Routines.
 
 - goroutine leak prevention
+
+- native pprof & golang execution tracer integration
 
 ## Use Cases
 
