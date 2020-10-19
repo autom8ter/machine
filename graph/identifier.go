@@ -6,7 +6,7 @@ import (
 	"math/rand"
 )
 
-type Identifier interface {
+type ID interface {
 	// ID returns a string id
 	ID() string
 	// Type returns the string type

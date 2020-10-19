@@ -150,15 +150,15 @@ func runStatsTest(t *testing.T) {
 func runGraphTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	coleman := m.Graph().NewNode(m.Graph().NewIdentifier("user", "cword"), graph.Map{
+	coleman := m.Graph().NewNode(m.Graph().NewID("user", "cword"), graph.Map{
 		"job_title": "Software Engineer",
 	})
-	tyler := m.Graph().NewNode(m.Graph().NewIdentifier("user", "twash"), graph.Map{
+	tyler := m.Graph().NewNode(m.Graph().NewID("user", "twash"), graph.Map{
 		"job_title": "Carpenter",
 	})
 	m.Graph().AddNode(coleman)
 	m.Graph().AddNode(tyler)
-	colemansBFF := m.Graph().NewEdge(m.Graph().NewIdentifier("friend", "bff"), graph.Map{
+	colemansBFF := m.Graph().NewEdge(m.Graph().NewID("friend", "bff"), graph.Map{
 		"source": "school",
 	}, coleman, tyler)
 	m.Graph().AddEdge(colemansBFF)
@@ -210,18 +210,20 @@ func BenchmarkSetNode(b *testing.B) {
 	defer m.Close()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		coleman := m.Graph().NewNode(m.Graph().NewIdentifier("user", "cword"), graph.Map{
+		coleman := m.Graph().NewNode(m.Graph().NewID("user", "cword"), graph.Map{
 			"job_title": "Software Engineer",
 		})
-		tyler := m.Graph().NewNode(m.Graph().NewIdentifier("user", "twash"), graph.Map{
+		tyler := m.Graph().NewNode(m.Graph().NewID("user", "twash"), graph.Map{
 			"job_title": "Carpenter",
 		})
 		m.Graph().AddNode(coleman)
 		m.Graph().AddNode(tyler)
-		colemansBFF := m.Graph().NewEdge(m.Graph().NewIdentifier("friend", ""), graph.Map{
+		colemansBFF := m.Graph().NewEdge(m.Graph().NewID("friend", ""), graph.Map{
 			"source": "school",
 		}, coleman, tyler)
-		m.Graph().AddEdge(colemansBFF)
+		if err := m.Graph().AddEdge(colemansBFF); err != nil {
+			b.Fatal(err)
+		}
 		fromColeman, ok := m.Graph().EdgesFrom(coleman)
 		if !ok {
 			b.Fatal("expected at least one edge")

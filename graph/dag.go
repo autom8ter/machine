@@ -1,39 +1,46 @@
 package graph
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Graph is a concurrency safe directed Graph datastructure
 type Graph interface {
-	// NewIdentifier is a constructor for an Identifier. If an id is not specified, a random one will be generated automatically.
-	NewIdentifier(typ string, id string) Identifier
-	// NewNode is a constructor for a graph node
-	NewEdge(id Identifier, attributes Map, from, to Node) Edge
-	// NewNode is a constructor for a graph node
-	NewNode(id Identifier, attributes Map) Node
+	// NewID is a constructor for a new ID. If an id is not specified, a random one will be generated automatically.
+	NewID(typ string, id string) ID
+	// NewEdge is a constructor for a new graph edge node
+	NewEdge(id ID, attributes Map, from, to Node) Edge
+	// NewNode is a constructor for a a new graph node
+	NewNode(id ID, attributes Map) Node
 	// AddNode adds a single node to the graph
 	AddNode(n Node)
 	// GetNode gets a node from the graph if it exists
-	GetNode(id Identifier) (Node, bool)
+	GetNode(id ID) (Node, bool)
 	// DelNode deletes the nodes and it's edges
-	DelNode(id Identifier)
+	DelNode(id ID)
 	// HasNode returns true if the node exists in the graph
-	HasNode(id Identifier) bool
+	HasNode(id ID) bool
 	// NodeTypes returns an array of Node types that exist in the graph
 	NodeTypes() []string
 	// AddEdge adds an edge to the graph between the two nodes. It returns an error if one of the nodes does not exist.
 	AddEdge(e Edge) error
+	// AddEdges adds all of the edges to the graph
+	AddEdges(e Edges) error
 	// GetEdge gets the edge by id if it exists
-	GetEdge(id Identifier) (Edge, bool)
+	GetEdge(id ID) (Edge, bool)
 	// HasEdge returns true if the edge exists in the graph
-	HasEdge(id Identifier) bool
+	HasEdge(id ID) bool
 	// DelEdge deletes the edge
-	DelEdge(id Identifier)
+	DelEdge(id ID)
+	// DelEdges deletes all the edges at once
+	DelEdges(e Edges) error
 	// EdgesFrom returns all of the edges the point from the given node identifier
-	EdgesFrom(id Identifier) (Edges, bool)
+	EdgesFrom(id ID) (Edges, bool)
 	// EdgesTo returns all of the edges the point to the given node identifier
-	EdgesTo(id Identifier) (Edges, bool)
+	EdgesTo(id ID) (Edges, bool)
 	// EdgeTypes returns all of the edge types in the Graph
 	EdgeTypes() []string
+	// Close removes all entries from the cache
 	Close()
 }
 
@@ -57,7 +64,7 @@ func (g *graph) AddNode(n Node) {
 	g.nodes.Set(n.Type(), n.ID(), n)
 }
 
-func (g *graph) GetNode(id Identifier) (Node, bool) {
+func (g *graph) GetNode(id ID) (Node, bool) {
 	val, ok := g.nodes.Get(id.Type(), id.ID())
 	if ok {
 		n, ok := val.(Node)
@@ -68,20 +75,19 @@ func (g *graph) GetNode(id Identifier) (Node, bool) {
 	return nil, false
 }
 
-func (g *graph) HasNode(id Identifier) bool {
+func (g *graph) HasNode(id ID) bool {
 	_, ok := g.GetNode(id)
 	return ok
 }
 
-func (g *graph) DelNode(id Identifier) {
+func (g *graph) DelNode(id ID) {
 	if val, ok := g.edgesFrom.Get(id.Type(), id.ID()); ok {
 		if val != nil {
 			edges := val.(Edges)
-			for _, edgeList := range edges {
-				for _, e := range edgeList {
-					g.DelEdge(e)
-				}
-			}
+			edges.Range(func(e Edge) bool {
+				g.DelEdge(e)
+				return true
+			})
 		}
 	}
 	g.nodes.Delete(id.Type(), id.ID())
@@ -97,33 +103,29 @@ func (g *graph) AddEdge(e Edge) error {
 	g.edges.Set(e.Type(), e.ID(), e)
 	if val, ok := g.edgesFrom.Get(e.From().Type(), e.From().ID()); ok {
 		edges := val.(Edges)
-		edges[e.Type()][e.ID()] = e
+		edges.AddEdge(e)
 	} else {
 		edges := Edges{}
-		edges[e.Type()] = map[string]Edge{
-			e.ID(): e,
-		}
+		edges.AddEdge(e)
 		g.edgesFrom.Set(e.From().Type(), e.From().ID(), edges)
 	}
 	if val, ok := g.edgesTo.Get(e.To().Type(), e.To().ID()); ok {
 		edges := val.(Edges)
-		edges[e.Type()][e.ID()] = e
+		edges.AddEdge(e)
 	} else {
 		edges := Edges{}
-		edges[e.Type()] = map[string]Edge{
-			e.ID(): e,
-		}
+		edges.AddEdge(e)
 		g.edgesTo.Set(e.To().Type(), e.To().ID(), edges)
 	}
 	return nil
 }
 
-func (g *graph) HasEdge(id Identifier) bool {
+func (g *graph) HasEdge(id ID) bool {
 	_, ok := g.GetEdge(id)
 	return ok
 }
 
-func (g *graph) GetEdge(id Identifier) (Edge, bool) {
+func (g *graph) GetEdge(id ID) (Edge, bool) {
 	val, ok := g.edges.Get(id.Type(), id.ID())
 	if ok {
 		e, ok := val.(Edge)
@@ -134,21 +136,20 @@ func (g *graph) GetEdge(id Identifier) (Edge, bool) {
 	return nil, false
 }
 
-func (g *graph) DelEdge(id Identifier) {
+func (g *graph) DelEdge(id ID) {
 	val, ok := g.edges.Get(id.Type(), id.ID())
 	if ok && val != nil {
 		edge := val.(Edge)
 		fromVal, ok := g.edgesFrom.Get(edge.From().Type(), edge.From().ID())
 		if ok && fromVal != nil {
 			edges := fromVal.(Edges)
-
-			delete(edges[id.Type()], id.ID())
+			edges.DelEdge(id)
 			g.edgesFrom.Set(edge.From().Type(), edge.From().ID(), edges)
 		}
 		toVal, ok := g.edgesTo.Get(edge.To().Type(), edge.To().ID())
 		if ok && toVal != nil {
 			edges := toVal.(Edges)
-			delete(edges[id.Type()], id.ID())
+			edges.DelEdge(id)
 			g.edgesTo.Set(edge.To().Type(), edge.To().ID(), edges)
 		}
 	}
@@ -163,7 +164,28 @@ func (g *graph) NodeTypes() []string {
 	return g.nodes.Namespaces()
 }
 
-func (g *graph) EdgesFrom(id Identifier) (Edges, bool) {
+func (g *graph) AddEdges(e Edges) error {
+	var seenErr error
+	e.Range(func(edge Edge) bool {
+		if err := g.AddEdge(edge); err != nil {
+			seenErr = err
+			return false
+		}
+		return true
+	})
+	return seenErr
+}
+
+func (g *graph) DelEdges(e Edges) error {
+	var seenErr error
+	e.Range(func(edge Edge) bool {
+		g.DelEdge(edge)
+		return true
+	})
+	return seenErr
+}
+
+func (g *graph) EdgesFrom(id ID) (Edges, bool) {
 	val, ok := g.edgesFrom.Get(id.Type(), id.ID())
 	if ok {
 		if edges, ok := val.(Edges); ok {
@@ -173,7 +195,7 @@ func (g *graph) EdgesFrom(id Identifier) (Edges, bool) {
 	return nil, false
 }
 
-func (g *graph) EdgesTo(id Identifier) (Edges, bool) {
+func (g *graph) EdgesTo(id ID) (Edges, bool) {
 	val, ok := g.edgesTo.Get(id.Type(), id.ID())
 	if ok {
 		if edges, ok := val.(Edges); ok {
@@ -190,16 +212,7 @@ func (g *graph) Close() {
 	g.edges.Close()
 }
 
-func removeEdge(slice []Edge, id Identifier) []Edge {
-	for i, e := range slice {
-		if e.Type() == id.Type() && e.ID() == id.ID() {
-			return append(slice[:i], slice[i+1:]...)
-		}
-	}
-	return slice
-}
-
-func (g *graph) NewIdentifier(typ string, id string) Identifier {
+func (g *graph) NewID(typ string, id string) ID {
 	if id == "" {
 		id = genID()
 	}
@@ -209,7 +222,7 @@ func (g *graph) NewIdentifier(typ string, id string) Identifier {
 	}
 }
 
-func (g *graph) NewEdge(id Identifier, attributes Map, from, to Node) Edge {
+func (g *graph) NewEdge(id ID, attributes Map, from, to Node) Edge {
 	return &edge{
 		Node: g.NewNode(id, attributes),
 		from: from,
@@ -217,9 +230,9 @@ func (g *graph) NewEdge(id Identifier, attributes Map, from, to Node) Edge {
 	}
 }
 
-func (g *graph) NewNode(id Identifier, attributes Map) Node {
+func (g *graph) NewNode(i ID, attributes Map) Node {
 	return &node{
-		Identifier: id,
+		id:         i,
 		attributes: attributes,
 	}
 }
