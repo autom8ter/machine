@@ -1,4 +1,4 @@
-package machine
+package pubsub
 
 import (
 	"context"
@@ -19,6 +19,14 @@ type pubSub struct {
 	subscriptions map[string]map[int]chan interface{}
 	subMu         sync.RWMutex
 	closeOnce     sync.Once
+}
+
+func NewPubSub() PubSub{
+	return &pubSub{
+		subscriptions: map[string]map[int]chan interface{}{},
+		subMu:         sync.RWMutex{},
+		closeOnce:     sync.Once{},
+	}
 }
 
 func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg interface{})) error {

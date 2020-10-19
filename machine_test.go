@@ -3,6 +3,7 @@ package machine
 import (
 	"context"
 	"fmt"
+	"github.com/autom8ter/machine/graph"
 	"os"
 	"runtime/pprof"
 	"testing"
@@ -12,7 +13,7 @@ import (
 func Test(t *testing.T) {
 	t.Run("e2e", runE2ETest)
 	t.Run("stats", runStatsTest)
-	t.Run("cache", runCacheTest)
+	t.Run("graph", runGraphTest)
 }
 
 func runE2ETest(t *testing.T) {
@@ -146,29 +147,38 @@ func runStatsTest(t *testing.T) {
 	}
 }
 
-func runCacheTest(t *testing.T) {
+func runGraphTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	m.Cache().Set("testing", "testing", 1)
-	if !m.Cache().Exists("testing", "testing") {
-		t.Fatal("expected key to exist")
-	}
-	m.Cache().Map("testing").Range(func(k, v interface{}) bool {
-		t.Logf("%v = %v\n", k, v)
-		return true
+	coleman := graph.NewNode(graph.NewIdentifier("user", "cword"), graph.Map{
+		"job_title": "Software Engineer",
 	})
-
-	val, ok := m.Cache().Get("testing", "testing")
+	tyler := graph.NewNode(graph.NewIdentifier("user", "twash"), graph.Map{
+		"job_title": "Carpenter",
+	})
+	m.Graph().AddNode(coleman)
+	m.Graph().AddNode(tyler)
+	colemansBFF := graph.NewEdge(graph.NewIdentifier("friend", "bff"), graph.Map{
+		"source": "school",
+	}, coleman, tyler)
+	m.Graph().AddEdge(colemansBFF)
+	fromColeman, ok := m.Graph().EdgesFrom(coleman)
 	if !ok {
-		t.Fatal("key not found")
+		t.Fatal("expected at least one edge")
 	}
-	if val != 1 {
-		t.Fatal("incorrect cache value")
+	for _, edgeList := range fromColeman {
+		for _, e := range edgeList {
+			t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+		}
 	}
-	m.Cache().Delete("config", "env")
-	_, ok = m.Cache().Get("config", "env")
-	if ok {
-		t.Fatal("key found after deletion")
+	toTyler, ok := m.Graph().EdgesTo(tyler)
+	if !ok {
+		t.Fatal("expected at least one edge")
+	}
+	for _, edgeList := range toTyler {
+		for _, e := range edgeList {
+			t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+		}
 	}
 }
 
@@ -187,32 +197,41 @@ func BenchmarkGo(b *testing.B) {
 	m.Wait()
 }
 
-func BenchmarkSetCache(b *testing.B) {
+func BenchmarkSetNode(b *testing.B) {
 	b.ReportAllocs()
 	m := New(context.Background(), WithTimeout(5*time.Second))
 	defer m.Close()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		namespace := fmt.Sprint(n)
-		m.Cache().Set(namespace, n, 1)
-		if !m.Cache().Exists(namespace, n) {
-			b.Fatalf("failed to get: %v", n)
-		}
-		val, ok := m.Cache().Get(namespace, n)
+		coleman := graph.NewNode(graph.NewIdentifier("user", "cword"), graph.Map{
+			"job_title": "Software Engineer",
+		})
+		tyler := graph.NewNode(graph.NewIdentifier("user", "twash"), graph.Map{
+			"job_title": "Carpenter",
+		})
+		m.Graph().AddNode(coleman)
+		m.Graph().AddNode(tyler)
+		colemansBFF := graph.NewEdge(graph.NewIdentifier("friend", ""), graph.Map{
+			"source": "school",
+		}, coleman, tyler)
+		m.Graph().AddEdge(colemansBFF)
+		fromColeman, ok := m.Graph().EdgesFrom(coleman)
 		if !ok {
-			b.Fatalf("failed to get: %v", n)
+			b.Fatal("expected at least one edge")
 		}
-		if val != 1 {
-			b.Fatalf("expected 1 got: %v", val)
+		for _, edgeList := range fromColeman {
+			for _, e := range edgeList {
+				b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			}
 		}
-	}
-	for _, namespace := range m.Cache().Namespaces() {
-		b.Logf("namespace = %v entries = %v\n", namespace, m.Cache().Len(namespace))
-		m.Cache().Clear(namespace)
-	}
-	for _, namespace := range m.Cache().Namespaces() {
-		if m.Cache().Len(namespace) != 0 {
-			b.Fatalf("expected zero entries in %v after clear\n", namespace)
+		toTyler, ok := m.Graph().EdgesTo(tyler)
+		if !ok {
+			b.Fatal("expected at least one edge")
+		}
+		for _, edgeList := range toTyler {
+			for _, e := range edgeList {
+				b.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			}
 		}
 	}
 }

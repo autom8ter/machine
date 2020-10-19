@@ -1,4 +1,4 @@
-package machine
+package graph
 
 // Map is a functional map for storing arbitrary data. It is not concurrency safe
 type Map map[interface{}]interface{}

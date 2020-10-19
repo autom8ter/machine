@@ -1,6 +1,8 @@
 package machine
 
 import (
+	"github.com/autom8ter/machine/graph"
+	"github.com/autom8ter/machine/pubsub"
 	"time"
 )
 
@@ -68,8 +70,8 @@ type option struct {
 	maxRoutines int
 	children    []*Machine
 	middlewares []Middleware
-	pubsub      PubSub
-	cache       Cache
+	pubsub      pubsub.PubSub
+	graph       graph.Graph
 	tags        []string
 	key         interface{}
 	val         interface{}
@@ -91,16 +93,16 @@ func WithMaxRoutines(max int) Opt {
 }
 
 // WithPubSub sets the pubsub implementation for the machine instance. An inmemory implementation is used if none is provided.
-func WithPubSub(pubsub PubSub) Opt {
+func WithPubSub(pubsub pubsub.PubSub) Opt {
 	return func(o *option) {
 		o.pubsub = pubsub
 	}
 }
 
-// WithCache sets the cache implementation for the machine instance. An inmemory implementation is used if none is provided.
-func WithCache(cache Cache) Opt {
+// WithGraph sets the directed graph implementation for the machine instance. An inmemory implementation is used if none is provided.
+func WithGraph(graph graph.Graph) Opt {
 	return func(o *option) {
-		o.cache = cache
+		o.graph = graph
 	}
 }
 

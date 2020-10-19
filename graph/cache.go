@@ -1,45 +1,10 @@
-package machine
+package graph
 
 import (
 	"sync"
 )
 
-// Cache is a concurrency safe cache that stores arbitrary, namespaced data with optional TTL.
-type Cache interface {
-	// Namespaces returns all of the registered namespaces(so far) in the cache. Namespaces are created automatically with Set().
-	Namespaces() []string
-	// Get gets the value for the given key in the given namespace.
-	Get(namespace string, key interface{}) (interface{}, bool)
-	// Set sets a value for the given key in the given namespace.
-	Set(namespace string, key interface{}, value interface{})
-	// SetAll sets all values from the map in the given namespace
-	SetAll(namespace string, m Map)
-	// Range calls f sequentially for each key and value present within the given namespace.
-	// If f returns false, range stops the iteration.
-	Range(namespace string, f func(key, value interface{}) bool)
-	// Delete deletes the key and its value from the given namespace.
-	Delete(namespace string, key interface{})
-	// Len returns total kv pairs within namespace
-	Len(namespace string) int
-	// Exists returns whether the key exists within the namespace
-	Exists(namespace string, key interface{}) bool
-	// Clear clears all entries in the given namespace
-	Clear(namespace string)
-	// Copy returns an Map with all of the values in the namespace
-	Copy(namespace string) Map
-	// Filter iterates over all values in the namespace and returns an Map with all of the values in the namespace that the filter returns true for
-	Filter(namespace string, filter func(k, v interface{}) bool) Map
-	// Intersection returns a Map of all of the values that are within both namespaces
-	Intersection(namespace1, namespace2 string) Map
-	// Union returns a Map with a union of the two namespaces
-	Union(namespace1, namespace2 string) Map
-	// Map returns every value in the namespace
-	Map(namespace string) Map
-	// Close closes the Cache and frees up resources.
-	Close()
-}
-
-func newCache() Cache {
+func newCache() *namespacedCache {
 	return &namespacedCache{
 		cacheMap:  map[string]*cache{},
 		mu:        sync.RWMutex{},

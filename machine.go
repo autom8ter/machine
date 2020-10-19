@@ -2,6 +2,8 @@ package machine
 
 import (
 	"context"
+	"github.com/autom8ter/machine/graph"
+	"github.com/autom8ter/machine/pubsub"
 	"os"
 	"os/signal"
 	"runtime/pprof"
@@ -32,8 +34,8 @@ type Machine struct {
 	max         int
 	closeOnce   sync.Once
 	doneOnce    sync.Once
-	pubsub      PubSub
-	cache       Cache
+	pubsub      pubsub.PubSub
+	graph       graph.Graph
 	started     int64
 	finished    int64
 	timeout     time.Duration
@@ -51,10 +53,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		opts.maxRoutines = DefaultMaxRoutines
 	}
 	if opts.pubsub == nil {
-		opts.pubsub = &pubSub{
-			subscriptions: map[string]map[int]chan interface{}{},
-			subMu:         sync.RWMutex{},
-		}
+		opts.pubsub = pubsub.NewPubSub()
 	}
 	if opts.key != nil && opts.val != nil {
 		ctx = context.WithValue(ctx, opts.key, opts.val)
@@ -73,8 +72,8 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	for _, c := range opts.children {
 		children[c.id] = c
 	}
-	if opts.cache == nil {
-		opts.cache = newCache()
+	if opts.graph == nil {
+		opts.graph = graph.NewGraph()
 	}
 	ctx, tsk := trace.NewTask(ctx, opts.id)
 	m := &Machine{
@@ -93,7 +92,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		closeOnce:   sync.Once{},
 		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
-		cache:       opts.cache,
+		graph:       opts.graph,
 		started:     0,
 		finished:    0,
 		timeout:     opts.timeout,
@@ -125,9 +124,9 @@ func (p *Machine) Tags() []string {
 	return p.tags
 }
 
-// Cache returns the machine's cache implementation. One is automatically set if not provided as an Opt on machine instance creation.
-func (m *Machine) Cache() Cache {
-	return m.cache
+// Graph returns the machine's directed graph implementation. One is automatically set if not provided as an Opt on machine instance creation.
+func (m *Machine) Graph() graph.Graph {
+	return m.graph
 }
 
 // Go calls the given function in a new goroutine.
@@ -287,16 +286,16 @@ func (m *Machine) Close() {
 		}
 		m.done <- struct{}{}
 		m.pubsub.Close()
-		m.cache.Close()
+		m.graph.Close()
 	})
 	m.task.End()
 }
 
 // Sub returns a nested Machine instance that is dependent on the parent machine's context.
-// It inherits the parent's pubsub/cache implementation & middlewares if none are provided
+// It inherits the parent's pubsub/graph implementation & middlewares if none are provided
 // Sub machine's do not inherit their parents max routine setting
 func (m *Machine) Sub(opts ...Opt) *Machine {
-	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithCache(m.cache), WithPubSub(m.pubsub)}, opts...)
+	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithGraph(m.graph), WithPubSub(m.pubsub)}, opts...)
 	sub := New(m.ctx, opts...)
 	sub.parent = m
 	m.childMu.Lock()
