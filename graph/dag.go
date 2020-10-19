@@ -22,6 +22,10 @@ type Graph interface {
 	HasNode(id ID) bool
 	// NodeTypes returns an array of Node types that exist in the graph
 	NodeTypes() []string
+	// RangeNodeTypes ranges over every node of the given type until the given function returns false
+	RangeNodeTypes(typ string, fn func(n Node) bool)
+	// RangeNodes ranges over every node until the given function returns false
+	RangeNodes(fn func(n Node) bool)
 	// AddEdge adds an edge to the graph between the two nodes. It returns an error if one of the nodes does not exist.
 	AddEdge(e Edge) error
 	// AddEdges adds all of the edges to the graph
@@ -34,6 +38,10 @@ type Graph interface {
 	DelEdge(id ID)
 	// DelEdges deletes all the edges at once
 	DelEdges(e Edges) error
+	// RangeEdges ranges over every edge until the given function returns false
+	RangeEdges(fn func(e Edge) bool)
+	// RangeEdgeTypes ranges over every edge of the given type until the given function returns false
+	RangeEdgeTypes(typ string, fn func(e Edge) bool)
 	// EdgesFrom returns all of the edges the point from the given node identifier
 	EdgesFrom(id ID) (Edges, bool)
 	// EdgesTo returns all of the edges the point to the given node identifier
@@ -73,6 +81,58 @@ func (g *graph) GetNode(id ID) (Node, bool) {
 		}
 	}
 	return nil, false
+}
+
+func (g *graph) RangeNodeTypes(typ string, fn func(n Node) bool) {
+	g.nodes.Range(typ, func(key interface{}, val interface{}) bool {
+		n, ok := val.(Node)
+		if ok {
+			if !fn(n) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+func (g *graph) RangeNodes(fn func(n Node) bool) {
+	for _, namespace := range g.nodes.Namespaces() {
+		g.nodes.Range(namespace, func(key interface{}, val interface{}) bool {
+			n, ok := val.(Node)
+			if ok {
+				if !fn(n) {
+					return false
+				}
+			}
+			return true
+		})
+	}
+}
+
+func (g *graph) RangeEdges(fn func(e Edge) bool) {
+	for _, namespace := range g.edges.Namespaces() {
+		g.edges.Range(namespace, func(key interface{}, val interface{}) bool {
+			e, ok := val.(Edge)
+			if ok {
+				if !fn(e) {
+					return false
+				}
+			}
+			return true
+		})
+	}
+}
+
+func (g *graph) RangeEdgeTypes(typ string, fn func(e Edge) bool) {
+	g.edges.Range(typ, func(key interface{}, val interface{}) bool {
+		e, ok := val.(Edge)
+		if ok {
+			if !fn(e) {
+				return false
+			}
+		}
+		return true
+	})
 }
 
 func (g *graph) HasNode(id ID) bool {

@@ -41,6 +41,14 @@ func Test(t *testing.T) {
 			t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
 		}
 	}
+	g.RangeNodes(func(n graph.Node) bool {
+		t.Logf("node = %v", n.String())
+		return true
+	})
+	g.RangeEdges(func(e graph.Edge) bool {
+		t.Logf("edge = %v", e.String())
+		return true
+	})
 	g.DelEdge(colemansBFF)
 	fromColeman, _ = g.EdgesFrom(coleman)
 	if len(fromColeman["friend"]) > 0 {
@@ -84,6 +92,14 @@ func Benchmark(b *testing.B) {
 		if toTyler.Len(edgeType) != 1 {
 			b.Fatal("expected one friend")
 		}
+		g.RangeNodes(func(n graph.Node) bool {
+			b.Logf("node = %v", n.String())
+			return true
+		})
+		g.RangeEdges(func(e graph.Edge) bool {
+			b.Logf("edge = %v", e.String())
+			return true
+		})
 		g.DelEdge(colemansBFF)
 		fromColeman, _ = g.EdgesFrom(coleman)
 		if len(fromColeman[edgeType]) > 0 {
