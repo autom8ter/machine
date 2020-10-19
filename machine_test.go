@@ -150,15 +150,15 @@ func runStatsTest(t *testing.T) {
 func runGraphTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	coleman := graph.NewNode(graph.NewIdentifier("user", "cword"), graph.Map{
+	coleman := m.Graph().NewNode(m.Graph().NewIdentifier("user", "cword"), graph.Map{
 		"job_title": "Software Engineer",
 	})
-	tyler := graph.NewNode(graph.NewIdentifier("user", "twash"), graph.Map{
+	tyler := m.Graph().NewNode(m.Graph().NewIdentifier("user", "twash"), graph.Map{
 		"job_title": "Carpenter",
 	})
 	m.Graph().AddNode(coleman)
 	m.Graph().AddNode(tyler)
-	colemansBFF := graph.NewEdge(graph.NewIdentifier("friend", "bff"), graph.Map{
+	colemansBFF := m.Graph().NewEdge(m.Graph().NewIdentifier("friend", "bff"), graph.Map{
 		"source": "school",
 	}, coleman, tyler)
 	m.Graph().AddEdge(colemansBFF)
@@ -178,6 +178,13 @@ func runGraphTest(t *testing.T) {
 	for _, edgeList := range toTyler {
 		for _, e := range edgeList {
 			t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+		}
+	}
+	m.Graph().DelEdge(colemansBFF)
+	fromColeman, _ = m.Graph().EdgesFrom(coleman)
+	for _, edgeList := range fromColeman {
+		for _, e := range edgeList {
+			t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
 		}
 	}
 }
@@ -203,15 +210,15 @@ func BenchmarkSetNode(b *testing.B) {
 	defer m.Close()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		coleman := graph.NewNode(graph.NewIdentifier("user", "cword"), graph.Map{
+		coleman := m.Graph().NewNode(m.Graph().NewIdentifier("user", "cword"), graph.Map{
 			"job_title": "Software Engineer",
 		})
-		tyler := graph.NewNode(graph.NewIdentifier("user", "twash"), graph.Map{
+		tyler := m.Graph().NewNode(m.Graph().NewIdentifier("user", "twash"), graph.Map{
 			"job_title": "Carpenter",
 		})
 		m.Graph().AddNode(coleman)
 		m.Graph().AddNode(tyler)
-		colemansBFF := graph.NewEdge(graph.NewIdentifier("friend", ""), graph.Map{
+		colemansBFF := m.Graph().NewEdge(m.Graph().NewIdentifier("friend", ""), graph.Map{
 			"source": "school",
 		}, coleman, tyler)
 		m.Graph().AddEdge(colemansBFF)

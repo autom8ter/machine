@@ -15,10 +15,3 @@ type node struct {
 func (n *node) Attributes() Map {
 	return n.attributes
 }
-
-func NewNode(id Identifier, attributes Map) Node {
-	return &node{
-		Identifier: id,
-		attributes: attributes,
-	}
-}

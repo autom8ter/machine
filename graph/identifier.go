@@ -32,17 +32,6 @@ func (i *identity) String() string {
 	return fmt.Sprintf("%s.%s", i.typ, i.id)
 }
 
-// NewIdentifier returns a new Identifier implementation. If an id is not specified, a random one will be generated automatically.
-func NewIdentifier(typ string, id string) Identifier {
-	if id == "" {
-		id = genID()
-	}
-	return &identity{
-		id:  id,
-		typ: typ,
-	}
-}
-
 func genID() string {
 	b := make([]byte, 16)
 	_, err := rand.Read(b)

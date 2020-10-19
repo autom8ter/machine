@@ -24,12 +24,4 @@ func (e *edge) To() Node {
 	return e.to
 }
 
-func NewEdge(id Identifier, attributes Map, from, to Node) Edge {
-	return &edge{
-		Node: NewNode(id, attributes),
-		from: from,
-		to:   to,
-	}
-}
-
-type Edges map[string][]Edge
+type Edges map[string]map[string]Edge

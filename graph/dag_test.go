@@ -7,15 +7,15 @@ import (
 
 func Test(t *testing.T) {
 	g := graph.NewGraph()
-	coleman := graph.NewNode(graph.NewIdentifier("user", "cword"), graph.Map{
+	coleman := g.NewNode(g.NewIdentifier("user", "cword"), graph.Map{
 		"job_title": "Software Engineer",
 	})
-	tyler := graph.NewNode(graph.NewIdentifier("user", "twash"), graph.Map{
+	tyler := g.NewNode(g.NewIdentifier("user", "twash"), graph.Map{
 		"job_title": "Carpenter",
 	})
 	g.AddNode(coleman)
 	g.AddNode(tyler)
-	colemansBFF := graph.NewEdge(graph.NewIdentifier("friend", "bff"), graph.Map{
+	colemansBFF := g.NewEdge(g.NewIdentifier("friend", "bff"), graph.Map{
 		"source": "school",
 	}, coleman, tyler)
 	g.AddEdge(colemansBFF)
@@ -36,5 +36,10 @@ func Test(t *testing.T) {
 		for _, e := range edgeList {
 			t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
 		}
+	}
+	g.DelEdge(colemansBFF)
+	fromColeman, _ = g.EdgesFrom(coleman)
+	if len(fromColeman["friend"]) > 0 {
+		t.Fatal("expected zero friend edges")
 	}
 }
