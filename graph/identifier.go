@@ -15,6 +15,17 @@ type ID interface {
 	String() string
 }
 
+// if id is empty, a random id will be assigned
+func BasicID(typ string, id string) ID {
+	if id == "" {
+		id = genID()
+	}
+	return &identity{
+		id:  id,
+		typ: typ,
+	}
+}
+
 type identity struct {
 	id  string
 	typ string

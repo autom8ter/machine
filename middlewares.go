@@ -22,8 +22,7 @@ func Cron(ticker *time.Ticker) Middleware {
 	}
 }
 
-// While is a middleware that will continue to execute the Func while deciderFunc() returns true.
-// The loop breaks the first time deciderFunc() returns false or the routine's context cancels
+// While is a middleware that will execute the Func while deciderFunc() returns true or the context cancels.
 func While(deciderFunc func(routine Routine) bool) Middleware {
 	return func(fn Func) Func {
 		return func(routine Routine) {
@@ -33,7 +32,7 @@ func While(deciderFunc func(routine Routine) bool) Middleware {
 					return
 				default:
 					if !deciderFunc(routine) {
-						return
+						continue
 					}
 					fn(routine)
 				}

@@ -9,15 +9,15 @@ import (
 
 func Test(t *testing.T) {
 	g := graph.NewGraph()
-	coleman := g.NewNode(g.NewID("user", "cword"), graph.Map{
+	coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
 		"job_title": "Software Engineer",
 	})
-	tyler := g.NewNode(g.NewID("user", "twash"), graph.Map{
+	tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
 		"job_title": "Carpenter",
 	})
 	g.AddNode(coleman)
 	g.AddNode(tyler)
-	colemansBFF := g.NewEdge(g.NewID("friend", "bff"), graph.Map{
+	colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
 		"source": "school",
 	}, coleman, tyler)
 	if err := g.AddEdge(colemansBFF); err != nil {
@@ -64,15 +64,15 @@ func Benchmark(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		nodeType := fmt.Sprintf("user.%v", time.Now().UnixNano())
 		edgeType := fmt.Sprintf("friend.%v", time.Now().UnixNano())
-		coleman := g.NewNode(g.NewID(nodeType, "cword"), graph.Map{
+		coleman := graph.BasicNode(graph.BasicID(nodeType, "cword"), graph.Map{
 			"job_title": "Software Engineer",
 		})
-		tyler := g.NewNode(g.NewID(nodeType, "twash"), graph.Map{
+		tyler := graph.BasicNode(graph.BasicID(nodeType, "twash"), graph.Map{
 			"job_title": "Carpenter",
 		})
 		g.AddNode(coleman)
 		g.AddNode(tyler)
-		colemansBFF := g.NewEdge(g.NewID(edgeType, ""), graph.Map{
+		colemansBFF := graph.BasicEdge(graph.BasicID(edgeType, ""), graph.Map{
 			"source": "school",
 		}, coleman, tyler)
 		if err := g.AddEdge(colemansBFF); err != nil {

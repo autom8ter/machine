@@ -7,6 +7,13 @@ type Node interface {
 	Attributes() Map
 }
 
+func BasicNode(id ID, attributes Map) Node {
+	return &node{
+		id:         id,
+		attributes: attributes,
+	}
+}
+
 type node struct {
 	id         ID
 	attributes Map

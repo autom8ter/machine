@@ -6,12 +6,6 @@ import (
 
 // Graph is a concurrency safe directed Graph datastructure
 type Graph interface {
-	// NewID is a constructor for a new ID. If an id is not specified, a random one will be generated automatically.
-	NewID(typ string, id string) ID
-	// NewEdge is a constructor for a new graph edge node
-	NewEdge(id ID, attributes Map, from, to Node) Edge
-	// NewNode is a constructor for a a new graph node
-	NewNode(id ID, attributes Map) Node
 	// AddNode adds a single node to the graph
 	AddNode(n Node)
 	// GetNode gets a node from the graph if it exists
@@ -270,29 +264,4 @@ func (g *graph) Close() {
 	g.edgesTo.Close()
 	g.edgesFrom.Close()
 	g.edges.Close()
-}
-
-func (g *graph) NewID(typ string, id string) ID {
-	if id == "" {
-		id = genID()
-	}
-	return &identity{
-		id:  id,
-		typ: typ,
-	}
-}
-
-func (g *graph) NewEdge(id ID, attributes Map, from, to Node) Edge {
-	return &edge{
-		Node: g.NewNode(id, attributes),
-		from: from,
-		to:   to,
-	}
-}
-
-func (g *graph) NewNode(i ID, attributes Map) Node {
-	return &node{
-		id:         i,
-		attributes: attributes,
-	}
 }

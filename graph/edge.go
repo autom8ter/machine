@@ -16,6 +16,14 @@ type edge struct {
 	to   Node
 }
 
+func BasicEdge(id ID, attributes Map, from, to Node) Edge {
+	return &edge{
+		Node: BasicNode(id, attributes),
+		from: from,
+		to:   to,
+	}
+}
+
 func (e *edge) From() Node {
 	return e.from
 }
