@@ -3,7 +3,7 @@ module github.com/autom8ter/machine/examples
 go 1.15
 
 require (
-	github.com/autom8ter/machine v0.5.0
+	github.com/autom8ter/machine v0.6.0
 	github.com/golang/protobuf v1.4.2
 	github.com/pkg/errors v0.8.1 // indirect
 	go.uber.org/zap v1.16.0
