@@ -47,6 +47,14 @@ func runE2ETest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}, GoWithTags("subscribe"))
+	// start a goroutine that subscribes to just the first two messages it receives on the channel
+	m.Go(func(routine Routine) {
+		routine.SubscribeN(channelName, 2, func(obj interface{}) {
+			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, GoWithTags("subscribeN"),
+		GoWithTimeout(5*time.Second),
+	)
 	m.Go(func(routine Routine) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")

@@ -27,6 +27,8 @@ type Routine interface {
 	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
 	Subscribe(channel string, handler func(obj interface{})) error
+	// SubscribeN subscribes to the given channel until it receives N messages or its context is cancelled
+	SubscribeN(channel string, n int, handler func(msg interface{})) error
 	// TraceLog logs a message within the goroutine execution tracer. ref: https://golang.org/pkg/runtime/trace/#example_
 	TraceLog(message string)
 	// Machine returns the underlying routine's machine instance
@@ -73,6 +75,10 @@ func (g *goRoutine) Publish(channel string, obj interface{}) error {
 
 func (g *goRoutine) Subscribe(channel string, handler func(obj interface{})) error {
 	return g.machine.pubsub.Subscribe(g.ctx, channel, handler)
+}
+
+func (g *goRoutine) SubscribeN(channel string, n int, handler func(obj interface{})) error {
+	return g.machine.pubsub.SubscribeN(g.ctx, channel, n, handler)
 }
 
 func (g *goRoutine) Machine() *Machine {

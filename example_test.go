@@ -27,6 +27,15 @@ func ExampleNew() {
 		machine.GoWithTimeout(5*time.Second),
 	)
 
+	// start a goroutine that subscribes to just the first two messages it receives on the channel
+	m.Go(func(routine machine.Routine) {
+		routine.SubscribeN(channelName, 2, func(obj interface{}) {
+			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, machine.GoWithTags("subscribe"),
+		machine.GoWithTimeout(5*time.Second),
+	)
+
 	// start another goroutine that publishes to the target channel every second for 5 seconds
 	m.Go(func(routine machine.Routine) {
 		fmt.Printf("%v | streaming msg to channel = %v stats = %s\n", routine.PID(), channelName, routine.Machine().Stats().String())
