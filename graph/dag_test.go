@@ -15,7 +15,7 @@ func Test(t *testing.T) {
 	tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
 		"job_title": "Carpenter",
 	})
-	g.AddNode(coleman)
+	g.AddNodes(coleman)
 	g.AddNode(tyler)
 	colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
 		"source": "school",

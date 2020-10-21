@@ -8,6 +8,8 @@ import (
 type Graph interface {
 	// AddNode adds a single node to the graph
 	AddNode(n Node)
+	// AddNodes adds multiple nodes to the graph
+	AddNodes(nodes ...Node)
 	// GetNode gets a node from the graph if it exists
 	GetNode(id ID) (Node, bool)
 	// DelNode deletes the nodes and it's edges
@@ -64,6 +66,12 @@ func NewGraph() Graph {
 
 func (g *graph) AddNode(n Node) {
 	g.nodes.Set(n.Type(), n.ID(), n)
+}
+
+func (g *graph) AddNodes(nodes ...Node) {
+	for _, n := range nodes {
+		g.AddNode(n)
+	}
 }
 
 func (g *graph) GetNode(id ID) (Node, bool) {
