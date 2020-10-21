@@ -41,6 +41,7 @@ type Machine struct {
 	timeout     time.Duration
 	deadline    time.Time
 	task        *trace.Task
+	closers     []func()
 }
 
 // New Creates a new machine instance with the given root context & options
@@ -98,6 +99,7 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		timeout:     opts.timeout,
 		deadline:    opts.deadline,
 		task:        tsk,
+		closers:     opts.closers,
 	}
 	pprof.Do(ctx, pprof.Labels(
 		"machine_id", m.id,
@@ -279,7 +281,7 @@ func (m *Machine) Stats() *Stats {
 	return stats
 }
 
-// Close completely closes the machine instance & all of it's children
+// Close completely closes the machine's pubsub/graph instance & all of it's closer functions. It also closes all of it's child machines(if they exist)
 func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
@@ -289,6 +291,9 @@ func (m *Machine) Close() {
 		m.done <- struct{}{}
 		m.pubsub.Close()
 		m.graph.Close()
+		for _, c := range m.closers {
+			c()
+		}
 	})
 	m.task.End()
 }

@@ -77,6 +77,7 @@ type option struct {
 	val         interface{}
 	timeout     time.Duration
 	deadline    time.Time
+	closers     []func()
 }
 
 // Opt is a single option when creating a machine instance with New
@@ -154,5 +155,11 @@ func WithDeadline(deadline time.Time) Opt {
 func WithID(id string) Opt {
 	return func(o *option) {
 		o.id = id
+	}
+}
+
+func WithClosers(closers ...func()) Opt {
+	return func(o *option) {
+		o.closers = append(o.closers, closers...)
 	}
 }
