@@ -39,6 +39,24 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
+		msg := "hey there bud!"
+
+		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
+		if err := routine.Publish(channelName, msg); err != nil {
+			t.Fatal(err)
+		}
+	},
+		GoWithTags("publish"),
+		GoWithPID("publisher"),
+		GoWithTimeout(5*time.Second),
+		GoWithMiddlewares(
+			Cron(time.NewTicker(1*time.Second)),
+		),
+	)
+	m.Go(func(routine Routine) {
+		if routine.Context().Value("testing").(bool) != true {
+			t.Fatal("expected testing = true in context")
+		}
 		if err := routine.Subscribe(channelName, func(obj interface{}) {
 			seen = true
 
@@ -50,28 +68,23 @@ func runE2ETest(t *testing.T) {
 	// start a goroutine that subscribes to just the first two messages it receives on the channel
 	m.Go(func(routine Routine) {
 		routine.SubscribeN(channelName, 2, func(obj interface{}) {
-			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+			fmt.Printf("%v | subscriptionN msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
 		})
 	}, GoWithTags("subscribeN"),
 		GoWithTimeout(5*time.Second),
 	)
+	exitAfterPublisher := func() bool {
+		return m.HasRoutine("publisher")
+	}
+	// start a goroutine that subscribes to just the channel until the publishing goroutine exits
 	m.Go(func(routine Routine) {
-		if routine.Context().Value("testing").(bool) != true {
-			t.Fatal("expected testing = true in context")
-		}
-		msg := "hey there bud!"
-
-		t.Logf("streaming msg to channel = %v msg = %v stats= %s\n", channelName, msg, routine.Machine().Stats().String())
-		if err := routine.Publish(channelName, msg); err != nil {
-			t.Fatal(err)
-		}
-	},
-		GoWithTags("publish"),
+		routine.SubscribeUntil(channelName, exitAfterPublisher, func(obj interface{}) {
+			fmt.Printf("%v | subscriptionUntil msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, GoWithTags("subscribeUntil"),
 		GoWithTimeout(5*time.Second),
-		GoWithMiddlewares(
-			Cron(time.NewTicker(1*time.Second)),
-		),
 	)
+
 	m2 := m.Sub(WithMaxRoutines(3))
 	defer m2.Close()
 

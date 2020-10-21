@@ -10,12 +10,16 @@ import (
 type PubSub interface {
 	// Publish publishes the object to the channel by name
 	Publish(channel string, obj interface{}) error
-	// Publish publishes the object to the channel by name to the first N subscribers of the channel
+	// PublishN publishes the object to the channel by name to the first N subscribers of the channel
 	PublishN(channel string, obj interface{}, n int) error
 	// Subscribe subscribes to the given channel until the context is cancelled
 	Subscribe(ctx context.Context, channel string, handler func(obj interface{})) error
 	// Subscribe subscribes to the given channel until it receives N messages or the context is cancelled
 	SubscribeN(ctx context.Context, channel string, n int, handler func(msg interface{})) error
+	// SubscribeUntil subscribes to the given channel until the decider returns false for the first time. The subscription breaks when the routine's context is cancelled or the decider returns false.
+	SubscribeUntil(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
+	// SubscribeWhile subscribes to the given channel while the decider returns true. The subscription breaks when the routine's context is cancelled.
+	SubscribeWhile(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
 	Close()
 }
 
@@ -36,20 +40,8 @@ func NewPubSub() PubSub {
 func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg interface{})) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p.subMu.Lock()
-	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan interface{}{}
-	}
-	ch := make(chan interface{}, 10)
-	subId := rand.Int()
-	p.subscriptions[channel][subId] = ch
-	p.subMu.Unlock()
-	defer func() {
-		p.subMu.Lock()
-		delete(p.subscriptions[channel], subId)
-		p.subMu.Unlock()
-		close(ch)
-	}()
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
 	for {
 		select {
 		case <-ctx.Done():
@@ -63,31 +55,55 @@ func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg
 func (p *pubSub) SubscribeN(ctx context.Context, channel string, n int, handler func(msg interface{})) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	p.subMu.Lock()
-	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan interface{}{}
-	}
-	ch := make(chan interface{}, 10)
-	subId := rand.Int()
-	p.subscriptions[channel][subId] = ch
-	p.subMu.Unlock()
-	defer func() {
-		p.subMu.Lock()
-		delete(p.subscriptions[channel], subId)
-		p.subMu.Unlock()
-		close(ch)
-	}()
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
 	count := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case msg := <-ch:
-			handler(msg)
 			count++
+			handler(msg)
 			if count >= n {
-				cancel()
+				return nil
 			}
+		}
+	}
+}
+
+func (p *pubSub) SubscribeUntil(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg := <-ch:
+			if !decider() {
+				return nil
+			}
+			handler(msg)
+		}
+	}
+}
+
+func (p *pubSub) SubscribeWhile(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg := <-ch:
+			if !decider() {
+				continue
+			}
+			handler(msg)
 		}
 	}
 }
@@ -121,6 +137,23 @@ func (p *pubSub) PublishN(channel string, obj interface{}, n int) error {
 		count++
 	}
 	return nil
+}
+
+func (p *pubSub) setupSubscription(channel string) (chan interface{}, func()) {
+	p.subMu.Lock()
+	if p.subscriptions[channel] == nil {
+		p.subscriptions[channel] = map[int]chan interface{}{}
+	}
+	ch := make(chan interface{}, 10)
+	subId := rand.Int()
+	p.subscriptions[channel][subId] = ch
+	p.subMu.Unlock()
+	return ch, func() {
+		p.subMu.Lock()
+		delete(p.subscriptions[channel], subId)
+		p.subMu.Unlock()
+		close(ch)
+	}
 }
 
 func (p *pubSub) Close() {

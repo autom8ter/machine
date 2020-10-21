@@ -25,14 +25,24 @@ type Routine interface {
 	Duration() time.Duration
 	// Publish publishes the object to the given channel
 	Publish(channel string, obj interface{}) error
+	// PublishN publishes the object to the channel by name to the first N subscribers of the channel
+	PublishN(channel string, obj interface{}, n int) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
 	Subscribe(channel string, handler func(obj interface{})) error
 	// SubscribeN subscribes to the given channel until it receives N messages or its context is cancelled
 	SubscribeN(channel string, n int, handler func(msg interface{})) error
+	// SubscribeUntil subscribes to the given channel until the decider returns false for the first time. The subscription breaks when the routine's context is cancelled or the decider returns false.
+	SubscribeUntil(channel string, decider func() bool, handler func(msg interface{})) error
+	// SubscribeWhile subscribes to the given channel while the decider returns true. The subscription breaks when the routine's context is cancelled.
+	SubscribeWhile(channel string, decider func() bool, handler func(msg interface{})) error
 	// TraceLog logs a message within the goroutine execution tracer. ref: https://golang.org/pkg/runtime/trace/#example_
 	TraceLog(message string)
 	// Machine returns the underlying routine's machine instance
 	Machine() *Machine
+}
+
+func (g *goRoutine) implements() Routine {
+	return g
 }
 
 type goRoutine struct {
@@ -73,12 +83,24 @@ func (g *goRoutine) Publish(channel string, obj interface{}) error {
 	return g.machine.pubsub.Publish(channel, obj)
 }
 
+func (g *goRoutine) PublishN(channel string, obj interface{}, n int) error {
+	return g.machine.pubsub.PublishN(channel, obj, n)
+}
+
 func (g *goRoutine) Subscribe(channel string, handler func(obj interface{})) error {
 	return g.machine.pubsub.Subscribe(g.ctx, channel, handler)
 }
 
 func (g *goRoutine) SubscribeN(channel string, n int, handler func(obj interface{})) error {
 	return g.machine.pubsub.SubscribeN(g.ctx, channel, n, handler)
+}
+
+func (g *goRoutine) SubscribeWhile(channel string, decider func() bool, handler func(obj interface{})) error {
+	return g.machine.pubsub.SubscribeWhile(g.ctx, channel, decider, handler)
+}
+
+func (g *goRoutine) SubscribeUntil(channel string, decider func() bool, handler func(obj interface{})) error {
+	return g.machine.pubsub.SubscribeUntil(g.ctx, channel, decider, handler)
 }
 
 func (g *goRoutine) Machine() *Machine {

@@ -1,48 +1,60 @@
 # Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine?status.svg)](https://godoc.org/github.com/autom8ter/machine)
 
+`import "github.com/autom8ter/machine"`
+
 ```go
-import "github.com/autom8ter/machine"
+        ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := machine.New(ctx,
+		machine.WithMaxRoutines(10),
+		machine.WithMiddlewares(machine.PanicRecover()),
+	)
+	defer m.Close()
 
-m := machine.New(context.Background(),
-	// functions are added to a FIFO channel that will block when active routines == max routines. 
-	machine.WithMaxRoutines(10),
-        // every function executed by machine.Go will recover from panics
-	machine.WithMiddlewares(machine.PanicRecover()),
-	// WithValue passes the value to the root context of the machine- it is available in the context of all child machine's & all Routine's
-        machine.WithValue("testing", true),
-        // WithTimeout cancels the machine's context after the given timeout
-        machine.WithTimeout(30 *time.Second)
-)
-defer m.Close()
-
-channelName := "acme.com"
-
-// start a goroutine that subscribes to all messages sent to the target channel for 5 seconds
-m.Go(func(routine machine.Routine) {
-		routine.Subscribe(channelName, func(obj interface{}) {
-			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n",
-				routine.PID(), channelName, obj, m.Stats().String())
-		})
-	},
-	machine.GoWithTags("subscribe"),
-	machine.GoWithTimeout(5*time.Second),
-)
-
-// start another goroutine that publishes to the target channel every second for 5 seconds
-m.Go(func(routine machine.Routine) {
+	channelName := "acme.com"
+	const publisherID = "publisher"
+	// start another goroutine that publishes to the target channel every second for 5 seconds OR the routine's context cancels
+	m.Go(func(routine machine.Routine) {
 		fmt.Printf("%v | streaming msg to channel = %v stats = %s\n", routine.PID(), channelName, routine.Machine().Stats().String())
 		// publish message to channel
 		routine.Publish(channelName, "hey there bud!")
-	},
-	machine.GoWithTags("publish"),
-	machine.GoWithTimeout(5*time.Second),
-	machine.GoWithMiddlewares(
-		// run every second until context cancels
-		machine.Cron(time.NewTicker(1*time.Second)),
-	),
-)
+	}, machine.GoWithTags("publish"),
+		machine.GoWithPID(publisherID),
+		machine.GoWithTimeout(5*time.Second),
+		machine.GoWithMiddlewares(
+			// run every second until context cancels
+			machine.Cron(time.NewTicker(1*time.Second)),
+		),
+	)
+	// start a goroutine that subscribes to all messages sent to the target channel for 3 seconds OR the routine's context cancels
+	m.Go(func(routine machine.Routine) {
+		routine.Subscribe(channelName, func(obj interface{}) {
+			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, machine.GoWithTags("subscribe"),
+		machine.GoWithTimeout(3*time.Second),
+	)
 
-m.Wait()
+	// start a goroutine that subscribes to just the first two messages it receives on the channel OR the routine's context cancels
+	m.Go(func(routine machine.Routine) {
+		routine.SubscribeN(channelName, 2, func(obj interface{}) {
+			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, machine.GoWithTags("subscribeN"))
+
+	// check if the machine has the publishing routine
+	exitAfterPublisher := func() bool {
+		return m.HasRoutine(publisherID)
+	}
+
+	// start a goroutine that subscribes to the channel until the publishing goroutine exits OR the routine's context cancels
+	m.Go(func(routine machine.Routine) {
+		routine.SubscribeUntil(channelName, exitAfterPublisher, func(obj interface{}) {
+			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
+		})
+	}, machine.GoWithTags("subscribeUntil"))
+
+	m.Wait()
 ```
 
 [Machine](https://pkg.go.dev/github.com/autom8ter/machine#Machine) is a zero dependency library for highly concurrent Go applications. It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
