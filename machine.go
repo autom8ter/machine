@@ -124,9 +124,11 @@ func (p *Machine) Tags() []string {
 	return p.tags
 }
 
-// Graph returns the machine's directed graph implementation. One is automatically set if not provided as an Opt on machine instance creation.
-func (m *Machine) Graph() graph.Graph {
-	return m.graph
+// Graph executes function on the machine's directed graph implementation.
+func (m *Machine) Graph(fn func(graph.Graph)) {
+	if m.graph != nil {
+		fn(m.graph)
+	}
 }
 
 // Go calls the given function in a new goroutine.

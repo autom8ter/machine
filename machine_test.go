@@ -171,43 +171,47 @@ func runStatsTest(t *testing.T) {
 func runGraphTest(t *testing.T) {
 	m := New(context.Background())
 	defer m.Close()
-	coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
-		"job_title": "Software Engineer",
+	m.Graph(func(g graph.Graph) {
+		coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
+			"job_title": "Software Engineer",
+		})
+		tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
+			"job_title": "Carpenter",
+		})
+		colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
+			"source": "school",
+		}, coleman, tyler)
+		g.AddNode(coleman)
+		g.AddNode(tyler)
+		if err := g.AddEdge(colemansBFF); err != nil {
+			t.Fatal(err)
+		}
+		fromColeman, ok := g.EdgesFrom(coleman)
+		if !ok {
+			t.Fatal("expected at least one edge")
+		}
+		for _, edgeList := range fromColeman {
+			for _, e := range edgeList {
+				t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			}
+		}
+		toTyler, ok := g.EdgesTo(tyler)
+		if !ok {
+			t.Fatal("expected at least one edge")
+		}
+		for _, edgeList := range toTyler {
+			for _, e := range edgeList {
+				t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			}
+		}
+		g.DelEdge(colemansBFF)
+		fromColeman, _ = g.EdgesFrom(coleman)
+		for _, edgeList := range fromColeman {
+			for _, e := range edgeList {
+				t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			}
+		}
 	})
-	tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
-		"job_title": "Carpenter",
-	})
-	m.Graph().AddNode(coleman)
-	m.Graph().AddNode(tyler)
-	colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
-		"source": "school",
-	}, coleman, tyler)
-	m.Graph().AddEdge(colemansBFF)
-	fromColeman, ok := m.Graph().EdgesFrom(coleman)
-	if !ok {
-		t.Fatal("expected at least one edge")
-	}
-	for _, edgeList := range fromColeman {
-		for _, e := range edgeList {
-			t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-		}
-	}
-	toTyler, ok := m.Graph().EdgesTo(tyler)
-	if !ok {
-		t.Fatal("expected at least one edge")
-	}
-	for _, edgeList := range toTyler {
-		for _, e := range edgeList {
-			t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-		}
-	}
-	m.Graph().DelEdge(colemansBFF)
-	fromColeman, _ = m.Graph().EdgesFrom(coleman)
-	for _, edgeList := range fromColeman {
-		for _, e := range edgeList {
-			t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-		}
-	}
 }
 
 func BenchmarkGo(b *testing.B) {
@@ -231,37 +235,46 @@ func BenchmarkSetNode(b *testing.B) {
 	defer m.Close()
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
-			"job_title": "Software Engineer",
-		})
-		tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
-			"job_title": "Carpenter",
-		})
-		m.Graph().AddNode(coleman)
-		m.Graph().AddNode(tyler)
-		colemansBFF := graph.BasicEdge(graph.BasicID("friend", ""), graph.Map{
-			"source": "school",
-		}, coleman, tyler)
-		if err := m.Graph().AddEdge(colemansBFF); err != nil {
-			b.Fatal(err)
-		}
-		fromColeman, ok := m.Graph().EdgesFrom(coleman)
-		if !ok {
-			b.Fatal("expected at least one edge")
-		}
-		for _, edgeList := range fromColeman {
-			for _, e := range edgeList {
-				b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+		m.Graph(func(g graph.Graph) {
+			coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
+				"job_title": "Software Engineer",
+			})
+			tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
+				"job_title": "Carpenter",
+			})
+			colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
+				"source": "school",
+			}, coleman, tyler)
+			g.AddNode(coleman)
+			g.AddNode(tyler)
+			if err := g.AddEdge(colemansBFF); err != nil {
+				b.Fatal(err)
 			}
-		}
-		toTyler, ok := m.Graph().EdgesTo(tyler)
-		if !ok {
-			b.Fatal("expected at least one edge")
-		}
-		for _, edgeList := range toTyler {
-			for _, e := range edgeList {
-				b.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+			fromColeman, ok := g.EdgesFrom(coleman)
+			if !ok {
+				b.Fatal("expected at least one edge")
 			}
-		}
+			for _, edgeList := range fromColeman {
+				for _, e := range edgeList {
+					b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+				}
+			}
+			toTyler, ok := g.EdgesTo(tyler)
+			if !ok {
+				b.Fatal("expected at least one edge")
+			}
+			for _, edgeList := range toTyler {
+				for _, e := range edgeList {
+					b.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+				}
+			}
+			g.DelEdge(colemansBFF)
+			fromColeman, _ = g.EdgesFrom(coleman)
+			for _, edgeList := range fromColeman {
+				for _, e := range edgeList {
+					b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
+				}
+			}
+		})
 	}
 }
