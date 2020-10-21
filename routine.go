@@ -35,6 +35,8 @@ type Routine interface {
 	SubscribeUntil(channel string, decider func() bool, handler func(msg interface{})) error
 	// SubscribeWhile subscribes to the given channel while the decider returns true. The subscription breaks when the routine's context is cancelled.
 	SubscribeWhile(channel string, decider func() bool, handler func(msg interface{})) error
+	// SubscribeFilter subscribes to the given channel with the given filter. The subscription breaks when the routine's context is cancelled.
+	SubscribeFilter(channel string, filter func(msg interface{}) bool, handler func(msg interface{})) error
 	// TraceLog logs a message within the goroutine execution tracer. ref: https://golang.org/pkg/runtime/trace/#example_
 	TraceLog(message string)
 	// Machine returns the underlying routine's machine instance
@@ -101,6 +103,10 @@ func (g *goRoutine) SubscribeWhile(channel string, decider func() bool, handler 
 
 func (g *goRoutine) SubscribeUntil(channel string, decider func() bool, handler func(obj interface{})) error {
 	return g.machine.pubsub.SubscribeUntil(g.ctx, channel, decider, handler)
+}
+
+func (g *goRoutine) SubscribeFilter(channel string, filter func(obj interface{}) bool, handler func(obj interface{})) error {
+	return g.machine.pubsub.SubscribeFilter(g.ctx, channel, filter, handler)
 }
 
 func (g *goRoutine) Machine() *Machine {

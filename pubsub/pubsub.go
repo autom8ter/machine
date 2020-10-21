@@ -20,6 +20,8 @@ type PubSub interface {
 	SubscribeUntil(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
 	// SubscribeWhile subscribes to the given channel while the decider returns true. The subscription breaks when the routine's context is cancelled.
 	SubscribeWhile(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
+	// SubscribeFilter subscribes to the given channel with the given filter
+	SubscribeFilter(ctx context.Context, channel string, filter func(msg interface{}) bool, handler func(msg interface{})) error
 	Close()
 }
 
@@ -100,10 +102,26 @@ func (p *pubSub) SubscribeWhile(ctx context.Context, channel string, decider fun
 		case <-ctx.Done():
 			return nil
 		case msg := <-ch:
-			if !decider() {
-				continue
+			if decider() {
+				handler(msg)
 			}
-			handler(msg)
+		}
+	}
+}
+
+func (p *pubSub) SubscribeFilter(ctx context.Context, channel string, decider func(msg interface{}) bool, handler func(msg interface{})) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg := <-ch:
+			if decider(msg) {
+				handler(msg)
+			}
 		}
 	}
 }
