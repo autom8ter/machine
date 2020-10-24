@@ -1,41 +1,11 @@
 package graph
 
-// Edge is a relationship between two nodes
-type Edge interface {
-	// An edge implements Node because it has an Identifier and attributes
-	Node
-	// From returns the root node of the edge
-	From() Node
-	// To returns the target node of the edge
-	To() Node
-}
+import "github.com/autom8ter/machine/primitive"
 
-type edge struct {
-	Node
-	from Node
-	to   Node
-}
+// edgeMap is a map of edges. edgeMap are not concurrency safe.
+type edgeMap map[string]map[string]*primitive.Edge
 
-func BasicEdge(id ID, attributes Map, from, to Node) Edge {
-	return &edge{
-		Node: BasicNode(id, attributes),
-		from: from,
-		to:   to,
-	}
-}
-
-func (e *edge) From() Node {
-	return e.from
-}
-
-func (e *edge) To() Node {
-	return e.to
-}
-
-// Edges is a map of edges. Edges are not concurrency safe.
-type Edges map[string]map[string]Edge
-
-func (e Edges) Types() []string {
+func (e edgeMap) Types() []string {
 	var typs []string
 	for t, _ := range e {
 		typs = append(typs, t)
@@ -44,11 +14,11 @@ func (e Edges) Types() []string {
 }
 
 // RangeType executes the function over a list of edges with the given type. If the function returns false, the iteration stops.
-func (e Edges) RangeType(typ string, fn func(e Edge) bool) {
-	if e[typ] == nil {
+func (e edgeMap) RangeType(typ primitive.Type, fn func(e *primitive.Edge) bool) {
+	if e[typ.Type()] == nil {
 		return
 	}
-	for _, e := range e[typ] {
+	for _, e := range e[typ.Type()] {
 		if !fn(e) {
 			break
 		}
@@ -56,7 +26,7 @@ func (e Edges) RangeType(typ string, fn func(e Edge) bool) {
 }
 
 // Range executes the function over every edge. If the function returns false, the iteration stops.
-func (e Edges) Range(fn func(e Edge) bool) {
+func (e edgeMap) Range(fn func(e *primitive.Edge) bool) {
 	for _, m := range e {
 		for _, e := range m {
 			if !fn(e) {
@@ -67,8 +37,8 @@ func (e Edges) Range(fn func(e Edge) bool) {
 }
 
 // Filter executes the function over every edge. If the function returns true, the edges will be added to the returned array of edges.
-func (e Edges) Filter(fn func(e Edge) bool) []Edge {
-	var edges []Edge
+func (e edgeMap) Filter(fn func(e *primitive.Edge) bool) []*primitive.Edge {
+	var edges []*primitive.Edge
 	for _, m := range e {
 		for _, e := range m {
 			if fn(e) {
@@ -80,12 +50,12 @@ func (e Edges) Filter(fn func(e Edge) bool) []Edge {
 }
 
 // FilterType executes the function over every edge of the given type. If the function returns true, the edges will be added to the returned array of edges.
-func (e Edges) FilterType(typ string, fn func(e Edge) bool) []Edge {
-	var edges []Edge
-	if e[typ] == nil {
+func (e edgeMap) FilterType(typ primitive.Type, fn func(e *primitive.Edge) bool) []*primitive.Edge {
+	var edges []*primitive.Edge
+	if e[typ.Type()] == nil {
 		return edges
 	}
-	for _, e := range e[typ] {
+	for _, e := range e[typ.Type()] {
 		if fn(e) {
 			edges = append(edges, e)
 		}
@@ -94,7 +64,7 @@ func (e Edges) FilterType(typ string, fn func(e Edge) bool) []Edge {
 }
 
 // DelEdge deletes the edge
-func (e Edges) DelEdge(id ID) {
+func (e edgeMap) DelEdge(id primitive.TypedID) {
 	if _, ok := e[id.Type()]; !ok {
 		return
 	}
@@ -102,9 +72,9 @@ func (e Edges) DelEdge(id ID) {
 }
 
 // AddEdge adds the edge to the map
-func (e Edges) AddEdge(edge Edge) {
+func (e edgeMap) AddEdge(edge *primitive.Edge) {
 	if _, ok := e[edge.Type()]; !ok {
-		e[edge.Type()] = map[string]Edge{
+		e[edge.Type()] = map[string]*primitive.Edge{
 			edge.ID(): edge,
 		}
 	} else {
@@ -113,13 +83,13 @@ func (e Edges) AddEdge(edge Edge) {
 }
 
 // HasEdge returns true if the edge exists
-func (e Edges) HasEdge(id ID) bool {
+func (e edgeMap) HasEdge(id primitive.TypedID) bool {
 	_, ok := e.GetEdge(id)
 	return ok
 }
 
 // GetEdge gets an edge by id
-func (e Edges) GetEdge(id ID) (Edge, bool) {
+func (e edgeMap) GetEdge(id primitive.TypedID) (*primitive.Edge, bool) {
 	if _, ok := e[id.Type()]; !ok {
 		return nil, false
 	}
@@ -130,8 +100,8 @@ func (e Edges) GetEdge(id ID) (Edge, bool) {
 }
 
 // Len returns the number of edges of the given type
-func (e Edges) Len(typ string) int {
-	if rels, ok := e[typ]; ok {
+func (e edgeMap) Len(typ primitive.Type) int {
+	if rels, ok := e[typ.Type()]; ok {
 		return len(rels)
 	}
 	return 0
