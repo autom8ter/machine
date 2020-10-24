@@ -2,7 +2,6 @@ package machine
 
 import (
 	"context"
-	"github.com/autom8ter/machine/graph"
 	"github.com/autom8ter/machine/pubsub"
 	"os"
 	"os/signal"
@@ -35,7 +34,6 @@ type Machine struct {
 	closeOnce   sync.Once
 	doneOnce    sync.Once
 	pubsub      pubsub.PubSub
-	graph       graph.Graph
 	started     int64
 	finished    int64
 	timeout     time.Duration
@@ -73,9 +71,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	for _, c := range opts.children {
 		children[c.id] = c
 	}
-	if opts.graph == nil {
-		opts.graph = graph.NewGraph()
-	}
 	ctx, tsk := trace.NewTask(ctx, opts.id)
 	m := &Machine{
 		id:          opts.id,
@@ -93,7 +88,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 		closeOnce:   sync.Once{},
 		doneOnce:    sync.Once{},
 		pubsub:      opts.pubsub,
-		graph:       opts.graph,
 		started:     0,
 		finished:    0,
 		timeout:     opts.timeout,
@@ -126,24 +120,22 @@ func (p *Machine) Tags() []string {
 	return p.tags
 }
 
-// Graph executes function on the machine's directed graph implementation.
-func (m *Machine) Graph(fn func(graph.Graph)) {
-	if m.graph != nil {
-		fn(m.graph)
-	}
-}
-
-// Go calls the given function in a new goroutine.
+// Go calls the given function in a new goroutine and returns the goroutine's unique id
 // it is passed information about the goroutine at runtime via the Routine interface
-func (m *Machine) Go(fn Func, opts ...GoOpt) {
+func (m *Machine) Go(fn Func, opts ...GoOpt) string {
 	if m.ctx.Err() == nil {
 		w := workPool.allocateWork()
 		for _, opt := range opts {
 			opt(w.opts)
 		}
+		if w.opts.id == "" {
+			w.opts.id = genUUID()
+		}
 		w.fn = fn
 		m.workQueue <- w
+		return w.opts.id
 	}
+	return ""
 }
 
 func (m *Machine) serve() {
@@ -174,9 +166,6 @@ func (m *Machine) serve() {
 			})
 			trace.WithRegion(ctx, "queue-accept", func() {
 				atomic.AddInt64(&m.started, 1)
-				if w.opts.id == "" {
-					w.opts.id = genUUID()
-				}
 				now := time.Now()
 				tags := strings.Join(w.opts.tags, " ")
 				pprof.Do(ctx, pprof.Labels(
@@ -281,7 +270,7 @@ func (m *Machine) Stats() *Stats {
 	return stats
 }
 
-// Close completely closes the machine's pubsub/graph instance & all of it's closer functions. It also closes all of it's child machines(if they exist)
+// Close completely closes the machine's pubsub instance & all of it's closer functions. It also closes all of it's child machines(if they exist)
 func (m *Machine) Close() {
 	m.doneOnce.Do(func() {
 		m.Cancel()
@@ -290,7 +279,6 @@ func (m *Machine) Close() {
 		}
 		m.done <- struct{}{}
 		m.pubsub.Close()
-		m.graph.Close()
 		for _, c := range m.closers {
 			c()
 		}
@@ -299,10 +287,10 @@ func (m *Machine) Close() {
 }
 
 // Sub returns a nested Machine instance that is dependent on the parent machine's context.
-// It inherits the parent's pubsub/graph implementation & middlewares if none are provided
+// It inherits the parent's pubsub implementation & middlewares if none are provided
 // Sub machine's do not inherit their parents max routine setting
 func (m *Machine) Sub(opts ...Opt) *Machine {
-	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithGraph(m.graph), WithPubSub(m.pubsub)}, opts...)
+	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithPubSub(m.pubsub)}, opts...)
 	sub := New(m.ctx, opts...)
 	sub.parent = m
 	m.childMu.Lock()

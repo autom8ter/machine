@@ -1,7 +1,6 @@
 package machine
 
 import (
-	"github.com/autom8ter/machine/graph"
 	"github.com/autom8ter/machine/pubsub"
 	"time"
 )
@@ -71,7 +70,6 @@ type option struct {
 	children    []*Machine
 	middlewares []Middleware
 	pubsub      pubsub.PubSub
-	graph       graph.Graph
 	tags        []string
 	key         interface{}
 	val         interface{}
@@ -97,13 +95,6 @@ func WithMaxRoutines(max int) Opt {
 func WithPubSub(pubsub pubsub.PubSub) Opt {
 	return func(o *option) {
 		o.pubsub = pubsub
-	}
-}
-
-// WithGraph sets the directed graph implementation for the machine instance. An inmemory implementation is used if none is provided.
-func WithGraph(graph graph.Graph) Opt {
-	return func(o *option) {
-		o.graph = graph
 	}
 }
 

@@ -3,7 +3,6 @@ package machine
 import (
 	"context"
 	"fmt"
-	"github.com/autom8ter/machine/graph"
 	"os"
 	"runtime/pprof"
 	"testing"
@@ -13,7 +12,6 @@ import (
 func Test(t *testing.T) {
 	t.Run("e2e", runE2ETest)
 	t.Run("stats", runStatsTest)
-	t.Run("graph", runGraphTest)
 }
 
 func runE2ETest(t *testing.T) {
@@ -165,116 +163,5 @@ func runStatsTest(t *testing.T) {
 	total := m.Stats().TotalRoutines
 	if total != 100 {
 		t.Fatalf("expected 100 total routines, got: %v\n", total)
-	}
-}
-
-func runGraphTest(t *testing.T) {
-	m := New(context.Background())
-	defer m.Close()
-	m.Graph(func(g graph.Graph) {
-		coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
-			"job_title": "Software Engineer",
-		})
-		tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
-			"job_title": "Carpenter",
-		})
-		colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
-			"source": "school",
-		}, coleman, tyler)
-		g.AddNode(coleman)
-		g.AddNode(tyler)
-		if err := g.AddEdge(colemansBFF); err != nil {
-			t.Fatal(err)
-		}
-		fromColeman, ok := g.EdgesFrom(coleman)
-		if !ok {
-			t.Fatal("expected at least one edge")
-		}
-		for _, edgeList := range fromColeman {
-			for _, e := range edgeList {
-				t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-			}
-		}
-		toTyler, ok := g.EdgesTo(tyler)
-		if !ok {
-			t.Fatal("expected at least one edge")
-		}
-		for _, edgeList := range toTyler {
-			for _, e := range edgeList {
-				t.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-			}
-		}
-		g.DelEdge(colemansBFF)
-		fromColeman, _ = g.EdgesFrom(coleman)
-		for _, edgeList := range fromColeman {
-			for _, e := range edgeList {
-				t.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-			}
-		}
-	})
-}
-
-func BenchmarkGo(b *testing.B) {
-	b.ReportAllocs()
-	m := New(context.Background(), WithMaxRoutines(100))
-	defer m.Close()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		m.Go(func(routine Routine) {
-			//time.Sleep(100 *time.Millisecond)
-			routine.TraceLog("here")
-			return
-		})
-	}
-	m.Wait()
-}
-
-func BenchmarkSetNode(b *testing.B) {
-	b.ReportAllocs()
-	m := New(context.Background(), WithTimeout(5*time.Second))
-	defer m.Close()
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		m.Graph(func(g graph.Graph) {
-			coleman := graph.BasicNode(graph.BasicID("user", "cword"), graph.Map{
-				"job_title": "Software Engineer",
-			})
-			tyler := graph.BasicNode(graph.BasicID("user", "twash"), graph.Map{
-				"job_title": "Carpenter",
-			})
-			colemansBFF := graph.BasicEdge(graph.BasicID("friend", "bff"), graph.Map{
-				"source": "school",
-			}, coleman, tyler)
-			g.AddNode(coleman)
-			g.AddNode(tyler)
-			if err := g.AddEdge(colemansBFF); err != nil {
-				b.Fatal(err)
-			}
-			fromColeman, ok := g.EdgesFrom(coleman)
-			if !ok {
-				b.Fatal("expected at least one edge")
-			}
-			for _, edgeList := range fromColeman {
-				for _, e := range edgeList {
-					b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-				}
-			}
-			toTyler, ok := g.EdgesTo(tyler)
-			if !ok {
-				b.Fatal("expected at least one edge")
-			}
-			for _, edgeList := range toTyler {
-				for _, e := range edgeList {
-					b.Logf("edge to (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-				}
-			}
-			g.DelEdge(colemansBFF)
-			fromColeman, _ = g.EdgesFrom(coleman)
-			for _, edgeList := range fromColeman {
-				for _, e := range edgeList {
-					b.Logf("edge from (%s) (%s) -> (%s)", e.String(), e.From().String(), e.To().String())
-				}
-			}
-		})
 	}
 }
