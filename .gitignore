@@ -3,3 +3,4 @@ vendor
 tmp
 *.prof
 cover.out
+external/prometheus/testing.metrics

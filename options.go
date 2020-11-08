@@ -2,6 +2,7 @@ package machine
 
 import (
 	"github.com/autom8ter/machine/pubsub"
+	"sort"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type GoOpt func(o *goOpts)
 func GoWithTags(tags ...string) GoOpt {
 	return func(o *goOpts) {
 		o.tags = append(o.tags, tags...)
+		sort.Strings(o.tags)
 	}
 }
 
@@ -117,6 +119,7 @@ func WithMiddlewares(middlewares ...Middleware) Opt {
 func WithTags(tags ...string) Opt {
 	return func(o *option) {
 		o.tags = append(o.tags, tags...)
+		sort.Strings(o.tags)
 	}
 }
 

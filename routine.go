@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/trace"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,7 @@ func (r *goRoutine) PID() string {
 }
 
 func (r *goRoutine) Tags() []string {
+	sort.Strings(r.tags)
 	return r.tags
 }
 

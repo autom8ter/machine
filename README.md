@@ -75,7 +75,6 @@
 
 - "sub" machines for creating a dependency tree between groups of goroutines
 
-
 - goroutine leak prevention
 
 - native pprof & golang execution tracer integration
@@ -114,3 +113,4 @@ All examples are < 500 lines of code(excluding code generation)
 - [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
 - [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
 - [Concurrent Cron Job Server](examples/README.md#concurrent-cron-server)
+

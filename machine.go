@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"runtime/pprof"
 	"runtime/trace"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -117,6 +118,7 @@ func (p *Machine) Total() int {
 
 // Tags returns the machine's tags
 func (p *Machine) Tags() []string {
+	sort.Strings(p.tags)
 	return p.tags
 }
 
