@@ -1,5 +1,8 @@
 # Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine?status.svg)](https://godoc.org/github.com/autom8ter/machine)
 
+![concurrency](images/concurrency.jpg)
+
+
 `import "github.com/autom8ter/machine"`
 
 ```go
