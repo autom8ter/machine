@@ -149,6 +149,7 @@ func WithID(id string) Opt {
 	}
 }
 
+// WithClosers makes the Machine instance execute the given closers before it closes
 func WithClosers(closers ...func()) Opt {
 	return func(o *option) {
 		o.closers = append(o.closers, closers...)
