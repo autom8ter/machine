@@ -320,6 +320,11 @@ func (m *Machine) CancelRoutine(id string) {
 	}
 }
 
+// PubSub returns the machine's underlying pubsub implementation
+func (m *Machine) PubSub() pubsub.PubSub {
+	return m.pubsub
+}
+
 // ID returns the machine instance's unique id.
 func (m *Machine) ID() string {
 	return m.id
