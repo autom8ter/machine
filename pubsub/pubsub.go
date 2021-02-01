@@ -6,113 +6,63 @@ import (
 	"sync"
 )
 
+// Handler is the function executed against the inbound message in a subscription
+type Handler func(msg interface{}) bool
+
+// Filter is a function to filter out messages before they reach a subscriptions primary Handler
+type Filter func(msg interface{}) bool
+
 // PubSub is used to asynchronously pass messages between routines.
 type PubSub interface {
 	// Publish publishes the object to the channel by name
 	Publish(channel string, obj interface{}) error
-	// PublishN publishes the object to the channel by name to the first N subscribers of the channel
-	PublishN(channel string, obj interface{}, n int) error
-	// Subscribe subscribes to the given channel until the context is cancelled
-	Subscribe(ctx context.Context, channel string, handler func(obj interface{})) error
-	// Subscribe subscribes to the given channel until it receives N messages or the context is cancelled
-	SubscribeN(ctx context.Context, channel string, n int, handler func(msg interface{})) error
-	// SubscribeUntil subscribes to the given channel until the decider returns false for the first time. The subscription breaks when the routine's context is cancelled or the decider returns false.
-	SubscribeUntil(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
-	// SubscribeWhile subscribes to the given channel while the decider returns true. The subscription breaks when the routine's context is cancelled.
-	SubscribeWhile(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error
-	// SubscribeFilter subscribes to the given channel with the given filter
-	SubscribeFilter(ctx context.Context, channel string, filter func(msg interface{}) bool, handler func(msg interface{})) error
+	// Subscribe subscribes to the given channel until the context is cancelled.
+	// If a qgroup is provided, the subscriber will be added to a queue group in which only one subscriber in the group will receive a message per message received
+	Subscribe(ctx context.Context, channel, qgroup string, handler Handler) error
+	// SubscribeFilter subscribes to messages that pass a given filter
+	// If a qgroup is provided, the subscriber will be added to a queue group in which only one subscriber in the group will receive a message per message received
+	SubscribeFilter(ctx context.Context, channel, qgroup string, filter Filter, handler Handler) error
+	// Close closes all subscriptions
 	Close()
 }
 
 type pubSub struct {
 	subscriptions map[string]map[int]chan interface{}
+	qgroups       map[string]map[string]map[int]chan interface{}
 	subMu         sync.RWMutex
 	closeOnce     sync.Once
 }
 
 func NewPubSub() PubSub {
 	return &pubSub{
+		qgroups:       map[string]map[string]map[int]chan interface{}{},
 		subscriptions: map[string]map[int]chan interface{}{},
 		subMu:         sync.RWMutex{},
 		closeOnce:     sync.Once{},
 	}
 }
 
-func (p *pubSub) Subscribe(ctx context.Context, channel string, handler func(msg interface{})) error {
+func (p *pubSub) Subscribe(ctx context.Context, channel, qgroup string, handler Handler) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ch, closer := p.setupSubscription(channel)
+	ch, closer := p.setupSubscription(channel, qgroup)
 	defer closer()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case msg := <-ch:
-			handler(msg)
-		}
-	}
-}
-
-func (p *pubSub) SubscribeN(ctx context.Context, channel string, n int, handler func(msg interface{})) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ch, closer := p.setupSubscription(channel)
-	defer closer()
-	count := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case msg := <-ch:
-			count++
-			handler(msg)
-			if count >= n {
+			if !handler(msg) {
 				return nil
 			}
 		}
 	}
 }
 
-func (p *pubSub) SubscribeUntil(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error {
+func (p *pubSub) SubscribeFilter(ctx context.Context, channel, qgroup string, decider Filter, handler Handler) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ch, closer := p.setupSubscription(channel)
-	defer closer()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case msg := <-ch:
-			if !decider() {
-				return nil
-			}
-			handler(msg)
-		}
-	}
-}
-
-func (p *pubSub) SubscribeWhile(ctx context.Context, channel string, decider func() bool, handler func(msg interface{})) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ch, closer := p.setupSubscription(channel)
-	defer closer()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case msg := <-ch:
-			if decider() {
-				handler(msg)
-			}
-		}
-	}
-}
-
-func (p *pubSub) SubscribeFilter(ctx context.Context, channel string, decider func(msg interface{}) bool, handler func(msg interface{})) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ch, closer := p.setupSubscription(channel)
+	ch, closer := p.setupSubscription(channel, qgroup)
 	defer closer()
 	for {
 		select {
@@ -120,69 +70,77 @@ func (p *pubSub) SubscribeFilter(ctx context.Context, channel string, decider fu
 			return nil
 		case msg := <-ch:
 			if decider(msg) {
-				handler(msg)
+				if !handler(msg) {
+					return nil
+				}
 			}
 		}
 	}
 }
 
 func (p *pubSub) Publish(channel string, obj interface{}) error {
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
+	p.subMu.RLock()
+	defer p.subMu.RUnlock()
 	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan interface{}{}
+		return nil
 	}
 	channelSubscribers := p.subscriptions[channel]
-	for _, input := range channelSubscribers {
-		input <- obj
-	}
-	return nil
-}
-
-func (p *pubSub) PublishN(channel string, obj interface{}, n int) error {
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
-	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan interface{}{}
-	}
-	channelSubscribers := p.subscriptions[channel]
-	count := 0
-	for _, input := range channelSubscribers {
-		if count >= n {
-			continue
+	channelGroups := p.qgroups[channel]
+	if channelGroups != nil {
+		for _, input := range channelGroups {
+			for _, ch := range input {
+				ch <- obj
+			}
 		}
-		input <- obj
-		count++
+	}
+	if channelSubscribers != nil {
+		for _, ch := range channelSubscribers {
+			ch <- obj
+		}
 	}
 	return nil
 }
 
-func (p *pubSub) setupSubscription(channel string) (chan interface{}, func()) {
-	p.subMu.Lock()
-	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan interface{}{}
-	}
-	ch := make(chan interface{}, 10)
+func (p *pubSub) setupSubscription(channel, qgroup string) (chan interface{}, func()) {
 	subId := rand.Int()
-	p.subscriptions[channel][subId] = ch
-	p.subMu.Unlock()
-	return ch, func() {
-		p.subMu.Lock()
-		delete(p.subscriptions[channel], subId)
-		p.subMu.Unlock()
-		close(ch)
+	ch := make(chan interface{}, 10)
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
+	if qgroup == "" {
+		if p.subscriptions[channel] == nil {
+			p.subscriptions[channel] = map[int]chan interface{}{}
+		}
+		p.subscriptions[channel][subId] = ch
+		return ch, func() {
+			p.subMu.Lock()
+			delete(p.subscriptions[channel], subId)
+			p.subMu.Unlock()
+			close(ch)
+		}
+	} else {
+		if p.qgroups[channel] == nil {
+			p.qgroups[channel] = map[string]map[int]chan interface{}{}
+		}
+		if p.qgroups[channel][qgroup] == nil {
+			p.qgroups[channel][qgroup] = map[int]chan interface{}{}
+		}
+		p.qgroups[channel][qgroup][subId] = ch
+		return ch, func() {
+			p.subMu.Lock()
+			delete(p.qgroups[channel][qgroup], subId)
+			p.subMu.Unlock()
+			close(ch)
+		}
 	}
+
 }
 
 func (p *pubSub) Close() {
 	p.closeOnce.Do(func() {
 		p.subMu.Lock()
 		defer p.subMu.Unlock()
-		for k, v := range p.subscriptions {
+		for k, _ := range p.subscriptions {
 			delete(p.subscriptions, k)
-			for _, v2 := range v {
-				close(v2)
-			}
 		}
 	})
 }

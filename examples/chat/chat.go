@@ -63,7 +63,7 @@ func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
 		}
 	})
 	c.machine.Go(func(routine machine.Routine) {
-		if err := routine.Subscribe(channel, func(obj interface{}) {
+		if err := routine.Subscribe(channel, "", func(obj interface{}) bool {
 			if obj != nil {
 				msg := obj.(*message)
 				if err := server.Send(&chatpb.ChatResponse{
@@ -78,6 +78,7 @@ func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
 					)
 				}
 			}
+			return true
 		}); err != nil {
 			c.logger.Error("failed to setup subscription",
 				zap.String("channel", channel),
