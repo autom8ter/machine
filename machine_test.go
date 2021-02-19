@@ -55,7 +55,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		if err := routine.Subscribe(channelName, "", func(obj interface{}) bool {
+		if err := routine.Subscribe(channelName, func(obj interface{}) bool {
 			seen = true
 
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())
@@ -66,7 +66,7 @@ func runE2ETest(t *testing.T) {
 	}, GoWithTags("subscribe"))
 	// start a goroutine that subscribes to just the channel until the publishing goroutine exits
 	m.Go(func(routine Routine) {
-		routine.Subscribe(channelName, "testing", func(obj interface{}) bool {
+		routine.Subscribe(channelName, func(obj interface{}) bool {
 			fmt.Printf("%v | subscriptionUntil msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
 			return m.HasRoutine("publisher")
 		})

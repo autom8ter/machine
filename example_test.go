@@ -33,7 +33,7 @@ func ExampleNew() {
 	)
 	// start a goroutine that subscribes to all messages sent to the target channel for 3 seconds OR the routine's context cancels
 	m.Go(func(routine machine.Routine) {
-		routine.Subscribe(channelName, "", func(obj interface{}) bool {
+		routine.Subscribe(channelName, func(obj interface{}) bool {
 			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
 			return true
 		})
@@ -43,7 +43,7 @@ func ExampleNew() {
 
 	// start a goroutine that subscribes to the channel until the publishing goroutine exits OR the routine's context cancels
 	m.Go(func(routine machine.Routine) {
-		routine.Subscribe(channelName, "", func(obj interface{}) bool {
+		routine.Subscribe(channelName, func(obj interface{}) bool {
 			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
 			return m.HasRoutine(publisherID)
 		})

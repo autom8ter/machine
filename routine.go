@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,9 +29,9 @@ type Routine interface {
 	// Publish publishes the object to the given channel
 	Publish(channel string, obj interface{}) error
 	// Subscribe subscribes to a channel and executes the function on every message passed to it. It exits if the goroutines context is cancelled.
-	Subscribe(channel, qgroup string, handler pubsub.Handler) error
+	Subscribe(channel string, handler pubsub.Handler) error
 	// SubscribeFilter subscribes to the given channel with the given filter. The subscription breaks when the routine's context is cancelled.
-	SubscribeFilter(channel, qgroup string, filter pubsub.Filter, handler pubsub.Handler) error
+	SubscribeFilter(channel string, filter pubsub.Filter, handler pubsub.Handler) error
 	// TraceLog logs a message within the goroutine execution tracer. ref: https://golang.org/pkg/runtime/trace/#example_
 	TraceLog(message string)
 	// Machine returns the underlying routine's machine instance
@@ -80,12 +81,12 @@ func (g *goRoutine) Publish(channel string, obj interface{}) error {
 	return g.machine.pubsub.Publish(channel, obj)
 }
 
-func (g *goRoutine) Subscribe(channel, qgroup string, handler pubsub.Handler) error {
-	return g.machine.pubsub.Subscribe(g.ctx, channel, qgroup, handler)
+func (g *goRoutine) Subscribe(channel string, handler pubsub.Handler) error {
+	return g.machine.pubsub.Subscribe(g.ctx, channel, handler)
 }
 
-func (g *goRoutine) SubscribeFilter(channel, qgroup string, filter pubsub.Filter, handler pubsub.Handler) error {
-	return g.machine.pubsub.SubscribeFilter(g.ctx, channel, qgroup, filter, handler)
+func (g *goRoutine) SubscribeFilter(channel string, filter pubsub.Filter, handler pubsub.Handler) error {
+	return g.machine.pubsub.SubscribeFilter(g.ctx, channel, filter, handler)
 }
 
 func (g *goRoutine) Machine() *Machine {
@@ -98,8 +99,8 @@ func (g *goRoutine) done() {
 		g.machine.mu.Lock()
 		delete(g.machine.routines, g.id)
 		g.machine.mu.Unlock()
+		atomic.AddInt64(&g.machine.finished, 1)
 	})
-	routinePool.deallocateRoutine(g)
 }
 
 func (g *goRoutine) TraceLog(message string) {

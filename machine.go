@@ -126,7 +126,11 @@ func (p *Machine) Tags() []string {
 // it is passed information about the goroutine at runtime via the Routine interface
 func (m *Machine) Go(fn Func, opts ...GoOpt) string {
 	if m.ctx.Err() == nil {
-		w := workPool.allocateWork()
+		w := &work{
+			opts: &goOpts{},
+			fn:   nil,
+			mu:   sync.RWMutex{},
+		}
 		for _, opt := range opts {
 			opt(w.opts)
 		}
@@ -185,24 +189,25 @@ func (m *Machine) serve() {
 					if w.opts.deadline != nil {
 						ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
 					}
-					routine := routinePool.allocateRoutine()
-					routine.machine = m
-					routine.ctx = ctx
-					routine.id = w.opts.id
-					routine.tags = w.opts.tags
-					routine.start = now
-					routine.doneOnce = sync.Once{}
-					routine.cancel = cancel
+					routine := &goRoutine{
+						machine:  m,
+						ctx:      ctx,
+						id:       w.opts.id,
+						tags:     w.opts.tags,
+						start:    now,
+						doneOnce: sync.Once{},
+						cancel:   cancel,
+					}
 					m.mu.Lock()
 					m.routines[w.opts.id] = routine
 					m.mu.Unlock()
 					go func(r *goRoutine) {
-						defer atomic.AddInt64(&m.finished, 1)
-						defer workPool.deallocateWork(w)
 						trace.WithRegion(ctx, tags, func() {
 							w.fn(r)
 							r.done()
 						})
+						w = nil
+						r = nil
 					}(routine)
 				})
 			})
