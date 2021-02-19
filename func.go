@@ -1,7 +1,5 @@
 package machine
 
-import "sync"
-
 // Func is the function passed into machine.Go. The Routine is passed into this function at runtime.
 type Func func(routine Routine)
 
@@ -11,5 +9,4 @@ type Middleware func(fn Func) Func
 type work struct {
 	opts *goOpts
 	fn   Func
-	mu   sync.RWMutex
 }

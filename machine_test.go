@@ -55,7 +55,7 @@ func runE2ETest(t *testing.T) {
 		if routine.Context().Value("testing").(bool) != true {
 			t.Fatal("expected testing = true in context")
 		}
-		if err := routine.Subscribe(channelName, func(obj interface{}) bool {
+		if err := routine.Subscribe("*.com", func(obj interface{}) bool {
 			seen = true
 
 			t.Logf("subscription msg received! channel = %v msg = %v stats= %s\n", channelName, obj, m.Stats().String())

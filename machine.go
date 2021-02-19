@@ -22,7 +22,6 @@ type Machine struct {
 	id          string
 	parent      *Machine
 	children    map[string]*Machine
-	childMu     sync.RWMutex
 	done        chan struct{}
 	cancel      func()
 	middlewares []Middleware
@@ -76,7 +75,6 @@ func New(ctx context.Context, options ...Opt) *Machine {
 	m := &Machine{
 		id:          opts.id,
 		children:    children,
-		childMu:     sync.RWMutex{},
 		done:        make(chan struct{}, 1),
 		cancel:      cancel,
 		middlewares: opts.middlewares,
@@ -129,7 +127,6 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) string {
 		w := &work{
 			opts: &goOpts{},
 			fn:   nil,
-			mu:   sync.RWMutex{},
 		}
 		for _, opt := range opts {
 			opt(w.opts)
@@ -137,9 +134,10 @@ func (m *Machine) Go(fn Func, opts ...GoOpt) string {
 		if w.opts.id == "" {
 			w.opts.id = genUUID()
 		}
+		id := w.opts.id
 		w.fn = fn
 		m.workQueue <- w
-		return w.opts.id
+		return id
 	}
 	return ""
 }
@@ -201,14 +199,13 @@ func (m *Machine) serve() {
 					m.mu.Lock()
 					m.routines[w.opts.id] = routine
 					m.mu.Unlock()
-					go func(r *goRoutine) {
+					go func(wrk *work, r *goRoutine) {
+						defer atomic.AddInt64(&m.finished, 1)
 						trace.WithRegion(ctx, tags, func() {
-							w.fn(r)
+							wrk.fn(r)
 							r.done()
 						})
-						w = nil
-						r = nil
-					}(routine)
+					}(w, routine)
 				})
 			})
 		}
@@ -245,8 +242,6 @@ func (p *Machine) Cancel() {
 func (m *Machine) Stats() *Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	m.childMu.RLock()
-	defer m.childMu.RUnlock()
 	copied := []RoutineStats{}
 	for _, v := range m.routines {
 		if v != nil {
@@ -300,9 +295,9 @@ func (m *Machine) Sub(opts ...Opt) *Machine {
 	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithPubSub(m.pubsub)}, opts...)
 	sub := New(m.ctx, opts...)
 	sub.parent = m
-	m.childMu.Lock()
+	m.mu.Lock()
 	m.children[sub.ID()] = sub
-	m.childMu.Unlock()
+	m.mu.Unlock()
 	return sub
 }
 
