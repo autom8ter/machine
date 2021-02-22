@@ -8,13 +8,23 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
-// Handler is the function executed against the inbound message in a subscription. If
-type Handler func(ctx context.Context, msg Message) (done bool, err error)
+// Handler is a first class that is executed against the inbound message in a subscription.
+// Return false to indicate that the subscription should end
+type Handler func(ctx context.Context, msg Message) (bool, error)
 
-// Filter is a function to filter out messages before they reach a subscriptions primary Handler
-type Filter func(ctx context.Context, msg Message) (match bool, err error)
+// Filter is a first class function to filter out messages before they reach a subscriptions primary Handler
+// Return true to indicate that a message passes the filter
+type Filter func(ctx context.Context, msg Message) (bool, error)
+
+// Func is a first class function that is asynchronously executed.
+type Func func(ctx context.Context) error
+
+// Cron is a first class function that is asynchronously executed against a machine instance.
+// Return false to indicate that the subscription should end
+type Cron func(ctx context.Context) (bool, error)
 
 // Machine is an interface
 type Machine interface {
@@ -24,8 +34,8 @@ type Machine interface {
 	Subscribe(ctx context.Context, channel string, handler Handler, opts ...SubOpt)
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Loop asynchronously executes the given function UNTIL the context cancels OR an error is returned by Func
-	Loop(ctx context.Context, fn Func)
+	// Cron asynchronously executes the given function at a given interval UNTIL the context cancels OR an error is returned by Func
+	Cron(ctx context.Context, interval time.Duration, fn Cron)
 	// Wait blocks until all active routine's exit, using the closure fn to handle runtime errors from Handler's, Filter's & Func's
 	Wait()
 	// Close closes all subscriptions
@@ -45,7 +55,7 @@ func WithFilter(filter Filter) SubOpt {
 }
 
 type machine struct {
-	errHandler func(err error)
+	errHandler    func(err error)
 	started       int64
 	finished      int64
 	max           int
@@ -57,7 +67,7 @@ type machine struct {
 
 type Options struct {
 	maxRoutines int
-	errHandler func(err error)
+	errHandler  func(err error)
 }
 
 type Opt func(o *Options)
@@ -80,13 +90,13 @@ func New(opts ...Opt) Machine {
 		o(options)
 	}
 	if options.errHandler != nil {
-		logger := log.New(os.Stderr, "machine", log.Flags())
+		logger := log.New(os.Stderr, "machine/v2", log.Flags())
 		options.errHandler = func(err error) {
 			logger.Printf("runtime error: %v", err)
 		}
 	}
 	return &machine{
-		errHandler: options.errHandler,
+		errHandler:    options.errHandler,
 		started:       0,
 		finished:      0,
 		max:           options.maxRoutines,
@@ -96,9 +106,6 @@ func New(opts ...Opt) Machine {
 		wg:            sync.WaitGroup{},
 	}
 }
-
-// Func is a first class function that is asynchronously executed against a machine instance.
-type Func func(ctx context.Context) error
 
 func (m *machine) Go(ctx context.Context, fn Func) {
 	if m.max > 0 {
@@ -161,18 +168,17 @@ func (p *machine) Subscribe(ctx context.Context, channel string, handler Handler
 				res, err := opts.filter(ctx, msg)
 				if err != nil {
 					p.errChan <- err
-					continue
 				}
 				if !res {
 					continue
 				}
 			}
-			done, err := handler(ctx, msg)
+			contin, err := handler(ctx, msg)
 			if err != nil {
 				p.errChan <- err
 				continue
 			}
-			if !done {
+			if !contin {
 				return
 			}
 		}
@@ -224,25 +230,53 @@ func (p *machine) Close() {
 	close(p.errChan)
 }
 
-func (m *machine) loop(ctx context.Context, fn Func) error {
+func (m *machine) loop(ctx context.Context, ticker *time.Ticker, fn Func) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-			if err := fn(ctx); err != nil {
-				m.errChan <- err
+	if ticker == nil {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				if err := fn(ctx); err != nil {
+					m.errChan <- err
+				}
+			}
+		}
+	} else {
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return nil
+			case <-ticker.C:
+				if err := fn(ctx); err != nil {
+					m.errChan <- err
+				}
 			}
 		}
 	}
-
 }
 
-func (m *machine) Loop(ctx context.Context, fn Func) {
+func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn Cron) {
 	m.Go(ctx, func(ctx context.Context) error {
-		return m.loop(ctx, fn)
+		ticker := time.NewTicker(timeout)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				contin, err := fn(ctx)
+				if err != nil {
+					m.errChan <- err
+				}
+				if !contin {
+					return nil
+				}
+			}
+		}
 	})
 }
 

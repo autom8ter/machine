@@ -2,6 +2,7 @@ package machine_test
 
 import (
 	"context"
+	"fmt"
 	"github.com/autom8ter/machine/v2"
 	"testing"
 	"time"
@@ -9,12 +10,13 @@ import (
 
 func Test(t *testing.T) {
 	var (
-		m     = machine.New(machine.WithErrHandler(func(err error) {
+		m = machine.New(machine.WithErrHandler(func(err error) {
 			t.Fatal(err)
 		}))
-		ctx   = context.Background()
 		count = 0
 	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	defer m.Close()
 	m.Go(ctx, func(ctx context.Context) error {
 		m.Subscribe(ctx, "testing.*", func(ctx context.Context, msg machine.Message) (bool, error) {
@@ -25,17 +27,21 @@ func Test(t *testing.T) {
 		return nil
 	})
 	time.Sleep(1 * time.Second)
-	m.Publish(ctx, machine.Msg{
-		Channel: "testing.0",
-		Body:    "hello world",
-	})
-	m.Publish(ctx, machine.Msg{
-		Channel: "testing.1",
-		Body:    "hello world",
-	})
-	m.Publish(ctx, machine.Msg{
-		Channel: "testing.2",
-		Body:    "hello world",
+	var published = 0
+	m.Cron(ctx, 250*time.Millisecond, func(ctx context.Context) (bool, error) {
+		m.Publish(ctx, machine.Msg{
+			Channel: fmt.Sprintf("testing.%v", published),
+			Body:    "hello world",
+		})
+		published++
+		return published < 3, nil
 	})
 	m.Wait()
+	if published < 3 {
+		t.Fatal("published < 3")
+	}
+	if count < 3 {
+		t.Fatal("count < 3")
+	}
+
 }

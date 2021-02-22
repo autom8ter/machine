@@ -107,7 +107,5 @@ func main() {
 			}
 		}
 	})
-	m.Wait(func(err error) {
-		logger.Error("runtime error", zap.Error(err))
-	})
+	m.Wait()
 }
