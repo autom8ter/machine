@@ -1,4 +1,4 @@
-# Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine?status.svg)](https://godoc.org/github.com/autom8ter/machine)
+# Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine/v2?status.svg)](https://godoc.org/github.com/autom8ter/machine/v2)
 
 ![concurrency](images/concurrency.jpg)
 
@@ -82,8 +82,9 @@
 It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
 - In memory Publish Subscribe for asynchronously broadcasting & consuming messages in memory
 - Asynchronous worker groups similar to errgroup.Group
-- Asynchronous error handling(see `machine.Wait(fn func(err error))`)
-
+- Throttled max active goroutine count
+- Asynchronous error handling(see `WithErrorHandler` to override default error handler)
+- Asynchronous cron jobs- `Cron()`
 
 ## Use Cases
 

@@ -42,12 +42,15 @@ type Machine interface {
 	Close()
 }
 
+// SubOptions holds config options for a subscription
 type SubOptions struct {
 	filter Filter
 }
 
+// SubOpt configures a subscription
 type SubOpt func(options *SubOptions)
 
+// WithFilter is a subscription option that filters messages
 func WithFilter(filter Filter) SubOpt {
 	return func(options *SubOptions) {
 		options.filter = filter
@@ -65,25 +68,30 @@ type machine struct {
 	wg            sync.WaitGroup
 }
 
+// Options holds config options for a machine instance
 type Options struct {
 	maxRoutines int
 	errHandler  func(err error)
 }
 
+// Opt configures a machine instance
 type Opt func(o *Options)
 
+// WithThrottledRoutines throttles the max number of active routine's spawned by the Machine.
 func WithThrottledRoutines(max int) Opt {
 	return func(o *Options) {
 		o.maxRoutines = max
 	}
 }
 
+// WithErrHandler overrides the default machine error handler
 func WithErrHandler(errHandler func(err error)) Opt {
 	return func(o *Options) {
 		o.errHandler = errHandler
 	}
 }
 
+// New creates a new Machine instance with the given options(if present)
 func New(opts ...Opt) Machine {
 	options := &Options{}
 	for _, o := range opts {
