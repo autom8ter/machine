@@ -13,46 +13,47 @@ import (
 
 // Handler is a first class that is executed against the inbound message in a subscription.
 // Return false to indicate that the subscription should end
-type Handler func(ctx context.Context, msg Message) (bool, error)
+type MessageHandlerFunc func(ctx context.Context, msg Message) (bool, error)
 
 // Filter is a first class function to filter out messages before they reach a subscriptions primary Handler
 // Return true to indicate that a message passes the filter
-type Filter func(ctx context.Context, msg Message) (bool, error)
+type MessageFilterFunc func(ctx context.Context, msg Message) (bool, error)
 
 // Func is a first class function that is asynchronously executed.
 type Func func(ctx context.Context) error
 
-// Cron is a first class function that is asynchronously executed against a machine instance.
-// Return false to indicate that the subscription should end
-type Cron func(ctx context.Context) (bool, error)
+// CronFunc is a first class function that is asynchronously executed on a timed interval.
+// Return false to indicate that the cron should end
+type CronFunc func(ctx context.Context) (bool, error)
 
-// Machine is an interface
+// Machine is an interface for highly asynchronous Go applications
 type Machine interface {
-	// Publish publishes the Message
+	// Publish synchronously publishes the Message
 	Publish(ctx context.Context, msg Message)
-	// Subscribe subscribes to messages on a given channel,  executing the given Handler it returns done OR until the context is cancelled
-	Subscribe(ctx context.Context, channel string, handler Handler, opts ...SubOpt)
+	// Subscribe synchronously subscribes to messages on a given channel,  executing the given Handler UNTIL the context cancels OR false is returned by the Handler function.
+	// Glob matching IS supported for subscribing to multiple channels at once.
+	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Cron asynchronously executes the given function at a given interval UNTIL the context cancels OR an error is returned by Func
-	Cron(ctx context.Context, interval time.Duration, fn Cron)
-	// Wait blocks until all active routine's exit, using the closure fn to handle runtime errors from Handler's, Filter's & Func's
+	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the Cron function
+	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
+	// Wait blocks until all active routine's exit
 	Wait()
-	// Close closes all subscriptions
+	// Close blocks until all active routine's exit then closes all subscriptions
 	Close()
 }
 
-// SubOptions holds config options for a subscription
-type SubOptions struct {
-	filter Filter
+// SubscriptionOptions holds config options for a subscription
+type SubscriptionOptions struct {
+	filter MessageFilterFunc
 }
 
-// SubOpt configures a subscription
-type SubOpt func(options *SubOptions)
+// SubscriptionOpt configures a subscription
+type SubscriptionOpt func(options *SubscriptionOptions)
 
 // WithFilter is a subscription option that filters messages
-func WithFilter(filter Filter) SubOpt {
-	return func(options *SubOptions) {
+func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
+	return func(options *SubscriptionOptions) {
 		options.filter = filter
 	}
 }
@@ -158,8 +159,8 @@ type Message interface {
 	GetBody() interface{}
 }
 
-func (p *machine) Subscribe(ctx context.Context, channel string, handler Handler, options ...SubOpt) {
-	opts := &SubOptions{}
+func (p *machine) Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) {
+	opts := &SubscriptionOptions{}
 	for _, o := range options {
 		o(opts)
 	}
@@ -238,36 +239,7 @@ func (p *machine) Close() {
 	close(p.errChan)
 }
 
-func (m *machine) loop(ctx context.Context, ticker *time.Ticker, fn Func) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	if ticker == nil {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			default:
-				if err := fn(ctx); err != nil {
-					m.errChan <- err
-				}
-			}
-		}
-	} else {
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return nil
-			case <-ticker.C:
-				if err := fn(ctx); err != nil {
-					m.errChan <- err
-				}
-			}
-		}
-	}
-}
-
-func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn Cron) {
+func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn CronFunc) {
 	m.Go(ctx, func(ctx context.Context) error {
 		ticker := time.NewTicker(timeout)
 		defer ticker.Stop()
