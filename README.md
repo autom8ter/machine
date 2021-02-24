@@ -8,19 +8,22 @@
 Machine is an interface for highly asynchronous Go applications
 
 ```go
+// Machine is an interface for highly asynchronous Go applications
 type Machine interface {
-	// Publish synchronously publishes the Message to all subscribers of the msg.channel
+	// Publish synchronously publishes the Message
 	Publish(ctx context.Context, msg Message)
-	// Subscribe synchronously subscribes to messages published on a given channel, executing the given Handler UNTIL the context cancels OR false is returned by the Handler function.
+	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
 	// Glob matching IS supported for subscribing to multiple channels at once.
 	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the Cron function
+	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
 	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
-	// Wait blocks until all active routine's exit
+	// Loop asynchronously executes the given function repeatedly UNTIL the context cancels OR false is returned by the LoopFunc
+	Loop(ctx context.Context, fn LoopFunc)
+	// Wait blocks until all active async functions(Loop, Go, Cron) exit
 	Wait()
-	// Close blocks until all active routine's exit then closes all subscriptions
+	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
 	Close()
 }
 ```
@@ -149,4 +152,6 @@ All examples are < 500 lines of code(excluding code generation)
 All examples are < 500 lines of code(excluding code generation)
 
 - [gRPC Bidirectional Chat Stream Server](v2/examples/README.md#grpc-bidirectional-chat-server)
+- [Concurrent Cron Job Server](v2/examples/README.md#concurrent-cron-server)
+- [TCP Reverse Proxy](v2/examples/README.md#tcp-reverse-proxy)
 

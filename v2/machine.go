@@ -26,20 +26,26 @@ type Func func(ctx context.Context) error
 // Return false to indicate that the cron should end
 type CronFunc func(ctx context.Context) (bool, error)
 
+// LoopFunc is a first class function that is asynchronously executed over and over again.
+// Return false to indicate that the loop should end
+type LoopFunc func(ctx context.Context) (bool, error)
+
 // Machine is an interface for highly asynchronous Go applications
 type Machine interface {
 	// Publish synchronously publishes the Message
 	Publish(ctx context.Context, msg Message)
-	// Subscribe synchronously subscribes to messages on a given channel,  executing the given Handler UNTIL the context cancels OR false is returned by the Handler function.
+	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
 	// Glob matching IS supported for subscribing to multiple channels at once.
 	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the Cron function
+	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
 	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
-	// Wait blocks until all active routine's exit
+	// Loop asynchronously executes the given function repeatedly UNTIL the context cancels OR false is returned by the LoopFunc
+	Loop(ctx context.Context, fn LoopFunc)
+	// Wait blocks until all active async functions(Loop, Go, Cron) exit
 	Wait()
-	// Close blocks until all active routine's exit then closes all subscriptions
+	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
 	Close()
 }
 
@@ -248,6 +254,25 @@ func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn CronFunc) 
 			case <-ctx.Done():
 				return nil
 			case <-ticker.C:
+				contin, err := fn(ctx)
+				if err != nil {
+					m.errChan <- err
+				}
+				if !contin {
+					return nil
+				}
+			}
+		}
+	})
+}
+
+func (m *machine) Loop(ctx context.Context, fn LoopFunc) {
+	m.Go(ctx, func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
 				contin, err := fn(ctx)
 				if err != nil {
 					m.errChan <- err
