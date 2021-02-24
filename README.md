@@ -5,7 +5,41 @@
 
 `import "github.com/autom8ter/machine/v2"`
 
-Machine is an interface for highly asynchronous Go applications
+[Machine](https://pkg.go.dev/github.com/autom8ter/machine/v2#Machine) is a zero dependency library for highly concurrent Go applications. 
+It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
+- In memory Publish Subscribe for asynchronously broadcasting & consuming messages in memory
+- Asynchronous worker groups similar to errgroup.Group
+- Throttled max active goroutine count
+- Asynchronous error handling(see `WithErrorHandler` to override default error handler)
+- Asynchronous cron jobs- `Cron()`
+
+## Use Cases
+
+[Machine](https://pkg.go.dev/github.com/autom8ter/machine#Machine) is meant to be completely agnostic and dependency free- its use cases are expected to be emergent.
+Really, it can be used **anywhere** goroutines are used. 
+
+Highly concurrent and/or asynchronous applications include:
+
+- gRPC streaming servers
+
+- websocket servers
+
+- pubsub servers
+
+- reverse proxies
+
+- cron jobs
+
+- custom database/cache
+
+- ETL pipelines
+
+- log sink
+
+- filesystem walker
+
+- code generation
+
 
 ```go
 // Machine is an interface for highly asynchronous Go applications
@@ -28,7 +62,7 @@ type Machine interface {
 }
 ```
 
-Example:
+## Example
 
 ```go
         ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -103,51 +137,7 @@ Example:
   	//(human_resources.chat_room6) received msg: hello world human resources
 ```
 
-[Machine](https://pkg.go.dev/github.com/autom8ter/machine/v2#Machine) is a zero dependency library for highly concurrent Go applications. 
-It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
-- In memory Publish Subscribe for asynchronously broadcasting & consuming messages in memory
-- Asynchronous worker groups similar to errgroup.Group
-- Throttled max active goroutine count
-- Asynchronous error handling(see `WithErrorHandler` to override default error handler)
-- Asynchronous cron jobs- `Cron()`
-
-## Use Cases
-
-[Machine](https://pkg.go.dev/github.com/autom8ter/machine#Machine) is meant to be completely agnostic and dependency free- its use cases are expected to be emergent.
-Really, it can be used **anywhere** goroutines are used. 
-
-Highly concurrent and/or asynchronous applications include:
-
-- gRPC streaming servers
-
-- websocket servers
-
-- pubsub servers
-
-- reverse proxies
-
-- cron jobs
-
-- custom database/cache
-
-- ETL pipelines
-
-- log sink
-
-- filesystem walker
-
-- code generation
-
-## Examples
-
-All examples are < 500 lines of code(excluding code generation)
-
-- [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
-- [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
-- [Concurrent Cron Job Server](examples/README.md#concurrent-cron-server)
-
-
-## Examples (v2)
+### Extended Examples
 
 All examples are < 500 lines of code(excluding code generation)
 
