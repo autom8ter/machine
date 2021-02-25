@@ -141,7 +141,7 @@ type Machine interface {
 
 All examples are < 500 lines of code(excluding code generation)
 
-- [gRPC Bidirectional Chat Stream Server](v2/examples/README.md#grpc-bidirectional-chat-server)
-- [Concurrent Cron Job Server](v2/examples/README.md#concurrent-cron-server)
-- [TCP Reverse Proxy](v2/examples/README.md#tcp-reverse-proxy)
+- [gRPC Bidirectional Chat Stream Server](examples/README.md#grpc-bidirectional-chat-server)
+- [Concurrent Cron Job Server](examples/README.md#concurrent-cron-server)
+- [TCP Reverse Proxy](examples/README.md#tcp-reverse-proxy)
 

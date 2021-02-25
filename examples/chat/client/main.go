@@ -5,10 +5,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/autom8ter/machine"
-	chatpb "github.com/autom8ter/machine/examples/gen/go/example/chat"
-	"github.com/autom8ter/machine/examples/helpers"
+	"github.com/autom8ter/machine/v2"
+	chatpb "github.com/autom8ter/machine/v2/examples/gen/go/example/chat"
+	"github.com/autom8ter/machine/v2/examples/helpers"
 	"github.com/golang/protobuf/jsonpb"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -41,10 +42,10 @@ func main() {
 		zap.String("target", target),
 		zap.String("channel", channel),
 	)
-	m := machine.New(ctx)
+	m := machine.New()
 	conn, err := grpc.Dial(target, grpc.WithInsecure())
 	if err != nil {
-		logger.Warn("failed to dial server", zap.Error(err))
+		logger.Error("failed to dial server", zap.Error(err))
 		return
 	}
 
@@ -58,16 +59,16 @@ func main() {
 	defer cancel()
 	stream, err := client.Chat(ctx)
 	if err != nil {
-		logger.Warn("failed to start chat stream", zap.Error(err))
+		logger.Error("failed to start chat stream", zap.Error(err))
 		return
 	}
-	m.Go(func(routine machine.Routine) {
+	m.Go(ctx, func(ctx context.Context) error {
 		reader := bufio.NewReader(os.Stdin)
 		defer reader.Discard(reader.Buffered())
 		for {
 			select {
-			case <-routine.Context().Done():
-				return
+			case <-ctx.Done():
+				return nil
 			default:
 				text, _ := reader.ReadString('\n')
 				text = strings.TrimSpace(text)
@@ -75,26 +76,25 @@ func main() {
 					if err := stream.Send(&chatpb.ChatRequest{
 						Text: text,
 					}); err != nil {
-						logger.Warn("failed to stream from os.Stdin to server", zap.Error(err))
-						return
+						return errors.Wrap(err, "failed to stream from os.Stdin to server")
 					}
 				}
 				reader.Reset(os.Stdin)
 			}
 		}
 	})
-	m.Go(func(routine machine.Routine) {
+	m.Go(ctx, func(ctx context.Context) error {
 		for {
 			select {
-			case <-routine.Context().Done():
-				return
+			case <-ctx.Done():
+				return nil
 			default:
 				resp, err := stream.Recv()
 				if err != nil {
 					if err == io.EOF {
 						continue
 					}
-					return
+					return err
 				}
 				if resp != nil && resp.Text != "" {
 					str, err := encoder.MarshalToString(resp)

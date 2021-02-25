@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/autom8ter/machine"
-	"github.com/autom8ter/machine/examples/helpers"
+	"github.com/autom8ter/machine/v2"
+	"github.com/autom8ter/machine/v2/examples/helpers"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
@@ -30,6 +31,8 @@ var (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger := helpers.Logger(zap.String("example", "cron"))
 	bits, err := ioutil.ReadFile(configPath)
 	if err != nil {
@@ -48,10 +51,12 @@ func main() {
 	for k, v := range c.Env {
 		os.Setenv(k, v)
 	}
-	m := machine.New(context.Background(),
-		machine.WithTags(c.Name),
-		machine.WithMiddlewares(machine.PanicRecover()),
-	)
+	var server *http.Server
+	m := machine.New(machine.WithErrHandler(func(err error) {
+		if errors.Unwrap(err) == http.ErrServerClosed && server != nil {
+			server.Close()
+		}
+	}))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cron/job", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -77,9 +82,10 @@ func main() {
 			return
 		}
 		c.Jobs = append(c.Jobs, &j)
-		m.Go(func(routine machine.Routine) {
-			execJob(logger, &j, routine)
-		}, machine.GoWithMiddlewares(machine.Cron(time.NewTicker(dur))))
+		m.Cron(ctx, dur, func(ctx context.Context) (bool, error) {
+			execJob(ctx, logger, &j)
+			return true, nil
+		})
 	})
 	mux.HandleFunc("/cron", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -89,7 +95,7 @@ func main() {
 		}
 		json.NewEncoder(w).Encode(c)
 	})
-	server := &http.Server{
+	server = &http.Server{
 		Handler: mux,
 	}
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
@@ -97,22 +103,26 @@ func main() {
 		logger.Error("failed to create listener", zap.Error(err))
 		return
 	}
-	m.Go(func(routine machine.Routine) {
+
+	m.Go(ctx, func(ctx context.Context) error {
 		if err := server.Serve(lis); err != nil && err != http.ErrServerClosed {
-			logger.Error("server failure", zap.Error(err))
+			return errors.Wrap(err, "server failure")
 		}
+		return nil
 	})
-	m.Go(func(routine machine.Routine) {
+	m.Go(ctx, func(ctx context.Context) error {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		for {
 			select {
-			case <-routine.Context().Done():
+			case <-ctx.Done():
 				logger.Info("shutting down server!")
 				server.Close()
-				lis.Close()
-				return
+				return lis.Close()
 			}
 		}
 	})
+
 	for _, jb := range c.Jobs {
 		dur, err := time.ParseDuration(jb.Sleep)
 		if err != nil {
@@ -125,22 +135,23 @@ func main() {
 			continue
 		}
 		j := jb //create local copy
-		m.Go(func(routine machine.Routine) {
-			execJob(logger, j, routine)
-		}, machine.GoWithMiddlewares(machine.Cron(time.NewTicker(dur))))
+		m.Cron(ctx, dur, func(ctx context.Context) (bool, error) {
+			execJob(ctx, logger, j)
+			return true, nil
+		})
 	}
 	time.Sleep(1 * time.Second)
 	m.Wait()
 	logger.Info("shutting down...")
 }
 
-func execJob(logger *zap.Logger, j *job, routine machine.Routine) {
+func execJob(ctx context.Context, logger *zap.Logger, j *job) {
 	logger.Info("executing job",
 		zap.String("name", j.Name),
 		zap.String("sleep", j.Sleep),
 		zap.String("script", j.Script),
 	)
-	out := shell(routine.Context(), j.Script)
+	out := shell(ctx, j.Script)
 	logger.Info("command finished",
 		zap.String("name", j.Name),
 		zap.String("sleep", j.Sleep),
@@ -162,7 +173,7 @@ type cron struct {
 }
 
 func shell(ctx context.Context, script string) string {
-	e := exec.CommandContext(ctx, "/bin/sh", "-c", script)
+	e := exec.CommandContext(ctx, "/bin/bash", "-c", script)
 	e.Env = os.Environ()
 	res, _ := e.CombinedOutput()
 	return strings.TrimSpace(string(res))

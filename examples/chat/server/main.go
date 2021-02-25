@@ -4,10 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/autom8ter/machine"
-	"github.com/autom8ter/machine/examples/chat"
-	chatpb "github.com/autom8ter/machine/examples/gen/go/example/chat"
-	"github.com/autom8ter/machine/examples/helpers"
+	"github.com/autom8ter/machine/v2"
+	"github.com/autom8ter/machine/v2/examples/chat"
+	chatpb "github.com/autom8ter/machine/v2/examples/gen/go/example/chat"
+	"github.com/autom8ter/machine/v2/examples/helpers"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"net"
@@ -25,7 +25,7 @@ var (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	m := machine.New(ctx)
+	m := machine.New()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		panic(err)
@@ -34,17 +34,17 @@ func main() {
 	srv := grpc.NewServer()
 	logger := helpers.Logger(zap.String("type", "server"))
 	chatpb.RegisterChatServiceServer(srv, chat.NewChatServer(logger, m))
-	m.Go(func(routine machine.Routine) {
-		logger.Info("starting server", zap.String("addr", lis.Addr().String()))
+	logger.Info("starting server", zap.String("addr", lis.Addr().String()))
+	m.Go(ctx, func(ctx context.Context) error {
 		if err := srv.Serve(lis); err != nil {
-			logger.Warn("server failure", zap.Error(err))
-			return
+			return err
 		}
+		return nil
 	})
-	m.Go(func(routine machine.Routine) {
+	m.Go(ctx, func(ctx context.Context) error {
 		for {
 			select {
-			case <-routine.Context().Done():
+			case <-ctx.Done():
 				logger.Info("shutting down server")
 				srv.Stop()
 			}

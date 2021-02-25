@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/autom8ter/machine"
-	chatpb "github.com/autom8ter/machine/examples/gen/go/example/chat"
+	"github.com/autom8ter/machine/v2"
+	chatpb "github.com/autom8ter/machine/v2/examples/gen/go/example/chat"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/metadata"
 	"strings"
@@ -14,10 +14,10 @@ import (
 
 type chat struct {
 	logger  *zap.Logger
-	machine *machine.Machine
+	machine machine.Machine
 }
 
-func NewChatServer(logger *zap.Logger, machine *machine.Machine) chatpb.ChatServiceServer {
+func NewChatServer(logger *zap.Logger, machine machine.Machine) chatpb.ChatServiceServer {
 	return &chat{logger: logger, machine: machine}
 }
 
@@ -31,13 +31,11 @@ func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
 	defer cancel()
 	email := emailFromContext(ctx)
 	channel := channelFromContext(ctx)
-	c.machine.Go(func(routine machine.Routine) {
+	c.machine.Go(ctx, func(ctx context.Context) error {
 		for {
 			select {
-			case <-routine.Context().Done():
-				return
 			case <-ctx.Done():
-				return
+				return nil
 			default:
 				incoming, err := server.Recv()
 				if err != nil {
@@ -48,43 +46,31 @@ func (c *chat) Chat(server chatpb.ChatService_ChatServer) error {
 					continue
 				}
 				if incoming.Text != "" {
-					if err := routine.Publish(channel, &message{
-						text:  incoming.Text,
-						email: email,
-					}); err != nil {
-						c.logger.Error("failed to publish incoming stream message",
-							zap.String("channel", channel),
-							zap.Error(err),
-						)
-						continue
-					}
+					c.machine.Publish(ctx, machine.Msg{
+						Channel: channel,
+						Body: &message{
+							text:  incoming.Text,
+							email: email,
+						},
+					})
 				}
 			}
 		}
 	})
-	c.machine.Go(func(routine machine.Routine) {
-		if err := routine.Subscribe(channel, func(obj interface{}) bool {
-			if obj != nil {
-				msg := obj.(*message)
-				if err := server.Send(&chatpb.ChatResponse{
-					Channel:   channel,
-					Text:      msg.text,
-					User:      msg.email,
-					Timestamp: time.Now().String(),
-				}); err != nil {
-					c.logger.Error("failed to start subscription",
-						zap.String("channel", channel),
-						zap.Error(err),
-					)
-				}
+	c.machine.Go(ctx, func(ctx context.Context) error {
+		c.machine.Subscribe(ctx, channel, func(ctx context.Context, msg machine.Message) (bool, error) {
+			m := msg.GetBody().(*message)
+			if err := server.Send(&chatpb.ChatResponse{
+				Channel:   channel,
+				Text:      m.text,
+				User:      m.email,
+				Timestamp: time.Now().String(),
+			}); err != nil {
+				return true, nil
 			}
-			return true
-		}); err != nil {
-			c.logger.Error("failed to setup subscription",
-				zap.String("channel", channel),
-				zap.Error(err),
-			)
-		}
+			return true, nil
+		})
+		return nil
 	})
 	select {
 	case <-ctx.Done():

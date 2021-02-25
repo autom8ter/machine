@@ -4,8 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/autom8ter/machine"
-	"github.com/autom8ter/machine/examples/helpers"
+	"github.com/autom8ter/machine/v2"
+	"github.com/autom8ter/machine/v2/examples/helpers"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
 	"net"
@@ -41,40 +42,37 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	mach := machine.New(ctx,
-		machine.WithTags("reverse-proxy"),
-	)
+	mach := machine.New()
 
 	pending := make(chan net.Conn, 100)
-	mach.Go(func(routine machine.Routine) {
+	mach.Go(ctx, func(ctx context.Context) error {
 		for {
 			select {
-			case <-routine.Context().Done():
-				return
+			case <-ctx.Done():
+				return nil
 			case c := <-pending:
-				if routine.Context().Err() != nil {
-					return
+				if ctx.Err() != nil {
+					return nil
 				}
-				mach.Go(func(routine machine.Routine) {
+				mach.Go(ctx, func(ctx context.Context) error {
 					targetConn, err := net.DialTCP("tcp", nil, targetAddr)
 					if err != nil {
-						logger.Error("failed to dial target", zap.Error(err))
-						return
+						return errors.Wrap(err, "failed to dial target")
 					}
 					targetConn.SetWriteBuffer(1024)
 					targetConn.SetReadBuffer(1024)
-					routine.Machine().Go(func(routine machine.Routine) {
+					mach.Go(ctx, func(ctx context.Context) error {
 						for {
 							select {
-							case <-routine.Context().Done():
+							case <-ctx.Done():
 								targetConn.Close()
 								c.Close()
-								return
+								return nil
 							default:
 								_, err := io.CopyN(c, targetConn, 1024)
 								if err != nil {
 									if err == io.EOF {
-										return
+										return nil
 									} else {
 										logger.Error("streaming to target error", zap.Error(err))
 										continue
@@ -82,26 +80,27 @@ func main() {
 								}
 							}
 						}
-					}, machine.GoWithTags("stream-from-client-to-target"))
-					routine.Machine().Go(func(routine machine.Routine) {
+					})
+					mach.Go(ctx, func(ctx context.Context) error {
 						for {
 							select {
-							case <-routine.Context().Done():
+							case <-ctx.Done():
 								targetConn.Close()
 								c.Close()
-								return
+								return nil
 							default:
 								_, err := io.CopyN(targetConn, c, 1024)
 								if err == io.EOF {
-									return
+									return nil
 								} else {
 									logger.Error("streaming from target error", zap.Error(err))
 									continue
 								}
 							}
 						}
-					}, machine.GoWithTags("stream-from-target-to-client"))
-				}, machine.GoWithTags("stream"))
+					})
+					return nil
+				})
 			}
 		}
 	})
@@ -116,24 +115,25 @@ func main() {
 		return
 	}
 	httpServer := &http.Server{Handler: http.DefaultServeMux}
-	mach.Go(func(routine machine.Routine) {
-		logger.Info("starting http server",
-			zap.String("addr", fmt.Sprintf(":%v", port+1)),
-		)
+	logger.Info("starting http server",
+		zap.String("addr", fmt.Sprintf(":%v", port+1)),
+	)
+	mach.Go(ctx, func(ctx context.Context) error {
 		if err := httpServer.Serve(httpLis); err != nil && err != http.ErrServerClosed {
-			logger.Warn("http server failure", zap.Error(err))
+			return errors.Wrap(err, "http server failure")
 		}
-	}, machine.GoWithTags("http-server"))
+		return nil
+	})
 
-	mach.Go(func(routine machine.Routine) {
+	mach.Go(ctx, func(ctx context.Context) error {
 		logger.Info("starting tcp server",
 			zap.String("addr", tcpLis.Addr().String()),
 			zap.String("target", target),
 		)
 		for {
 			select {
-			case <-routine.Context().Done():
-				return
+			case <-ctx.Done():
+				return nil
 			default:
 				conn, err := tcpLis.Accept()
 				if err != nil {
@@ -142,24 +142,21 @@ func main() {
 							continue
 						}
 					}
-					if routine.Context().Err() == nil {
-						logger.Error("tcp listener error", zap.Error(err))
-					}
-					return
+					return err
 				}
-				if routine.Context().Err() == nil {
+				if ctx.Err() == nil {
 					pending <- conn
 				}
 			}
 		}
-	}, machine.GoWithTags("tcp-server"))
+	})
 	interrupt := make(chan os.Signal, 1)
 
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(interrupt)
 	select {
 	case <-interrupt:
-		mach.Cancel()
+		cancel()
 		break
 	case <-ctx.Done():
 		break
