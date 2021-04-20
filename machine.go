@@ -2,332 +2,336 @@ package machine
 
 import (
 	"context"
-	"github.com/autom8ter/machine/pubsub"
+	"log"
+	"math/rand"
 	"os"
-	"os/signal"
-	"runtime/pprof"
-	"runtime/trace"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
-const DefaultMaxRoutines = 1000
+// Handler is a first class that is executed against the inbound message in a subscription.
+// Return false to indicate that the subscription should end
+type MessageHandlerFunc func(ctx context.Context, msg Message) (bool, error)
 
-// Machine is a zero dependency runtime for managed goroutines. It is inspired by errgroup.Group with extra bells & whistles:
-type Machine struct {
-	id          string
-	parent      *Machine
-	children    map[string]*Machine
-	done        chan struct{}
-	cancel      func()
-	middlewares []Middleware
-	ctx         context.Context
-	workQueue   chan *work
-	mu          sync.RWMutex
-	routines    map[string]Routine
-	tags        []string
-	max         int
-	closeOnce   sync.Once
-	doneOnce    sync.Once
-	pubsub      pubsub.PubSub
-	started     int64
-	finished    int64
-	timeout     time.Duration
-	deadline    time.Time
-	task        *trace.Task
-	closers     []func()
+// Filter is a first class function to filter out messages before they reach a subscriptions primary Handler
+// Return true to indicate that a message passes the filter
+type MessageFilterFunc func(ctx context.Context, msg Message) (bool, error)
+
+// Func is a first class function that is asynchronously executed.
+type Func func(ctx context.Context) error
+
+// CronFunc is a first class function that is asynchronously executed on a timed interval.
+// Return false to indicate that the cron should end
+type CronFunc func(ctx context.Context) (bool, error)
+
+// LoopFunc is a first class function that is asynchronously executed over and over again.
+// Return false to indicate that the loop should end
+type LoopFunc func(ctx context.Context) (bool, error)
+
+// Machine is an interface for highly asynchronous Go applications
+type Machine interface {
+	// Publish synchronously publishes the Message
+	Publish(ctx context.Context, msg Message)
+	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
+	// Glob matching IS supported for subscribing to multiple channels at once.
+	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
+	// Go asynchronously executes the given Func
+	Go(ctx context.Context, fn Func)
+	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
+	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
+	// Loop asynchronously executes the given function repeatedly UNTIL the context cancels OR false is returned by the LoopFunc
+	Loop(ctx context.Context, fn LoopFunc)
+	// Wait blocks until all active async functions(Loop, Go, Cron) exit
+	Wait()
+	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
+	Close()
 }
 
-// New Creates a new machine instance with the given root context & options
-func New(ctx context.Context, options ...Opt) *Machine {
-	opts := &option{}
+// SubscriptionOptions holds config options for a subscription
+type SubscriptionOptions struct {
+	filter MessageFilterFunc
+}
+
+// SubscriptionOpt configures a subscription
+type SubscriptionOpt func(options *SubscriptionOptions)
+
+// WithFilter is a subscription option that filters messages
+func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
+	return func(options *SubscriptionOptions) {
+		options.filter = filter
+	}
+}
+
+type machine struct {
+	errHandler    func(err error)
+	started       int64
+	finished      int64
+	max           int
+	subscriptions map[string]map[int]chan Message
+	subMu         sync.RWMutex
+	errChan       chan error
+	wg            sync.WaitGroup
+}
+
+// Options holds config options for a machine instance
+type Options struct {
+	maxRoutines int
+	errHandler  func(err error)
+}
+
+// Opt configures a machine instance
+type Opt func(o *Options)
+
+// WithThrottledRoutines throttles the max number of active routine's spawned by the Machine.
+func WithThrottledRoutines(max int) Opt {
+	return func(o *Options) {
+		o.maxRoutines = max
+	}
+}
+
+// WithErrHandler overrides the default machine error handler
+func WithErrHandler(errHandler func(err error)) Opt {
+	return func(o *Options) {
+		o.errHandler = errHandler
+	}
+}
+
+// New creates a new Machine instance with the given options(if present)
+func New(opts ...Opt) Machine {
+	options := &Options{}
+	for _, o := range opts {
+		o(options)
+	}
+	if options.errHandler != nil {
+		logger := log.New(os.Stderr, "machine/v2", log.Flags())
+		options.errHandler = func(err error) {
+			logger.Printf("runtime error: %v", err)
+		}
+	}
+	return &machine{
+		errHandler:    options.errHandler,
+		started:       0,
+		finished:      0,
+		max:           options.maxRoutines,
+		subscriptions: map[string]map[int]chan Message{},
+		subMu:         sync.RWMutex{},
+		errChan:       make(chan error),
+		wg:            sync.WaitGroup{},
+	}
+}
+
+func (m *machine) Go(ctx context.Context, fn Func) {
+	if m.max > 0 {
+		for x := m.activeRoutines(); x >= m.max; x = m.activeRoutines() {
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}
+	atomic.AddInt64(&m.started, 1)
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		defer atomic.AddInt64(&m.finished, 1)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		if err := fn(ctx); err != nil {
+			m.errChan <- err
+		}
+	}()
+}
+
+func (m *machine) activeRoutines() int {
+	return int(atomic.LoadInt64(&m.started) - atomic.LoadInt64(&m.finished))
+}
+
+type Msg struct {
+	Channel string
+	Body    interface{}
+}
+
+func (m Msg) GetChannel() string {
+	return m.Channel
+}
+
+func (m Msg) GetBody() interface{} {
+	return m.Body
+}
+
+type Message interface {
+	GetChannel() string
+	GetBody() interface{}
+}
+
+func (p *machine) Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) {
+	opts := &SubscriptionOptions{}
 	for _, o := range options {
 		o(opts)
 	}
-	if opts.maxRoutines <= 0 {
-		opts.maxRoutines = DefaultMaxRoutines
-	}
-	if opts.pubsub == nil {
-		opts.pubsub = pubsub.NewPubSub()
-	}
-	if opts.key != nil && opts.val != nil {
-		ctx = context.WithValue(ctx, opts.key, opts.val)
-	}
 	ctx, cancel := context.WithCancel(ctx)
-	if opts.timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, opts.timeout)
-	}
-	if opts.deadline.Unix() > time.Now().Unix() {
-		ctx, cancel = context.WithDeadline(ctx, opts.deadline)
-	}
-	if opts.id == "" {
-		opts.id = genUUID()
-	}
-	children := map[string]*Machine{}
-	for _, c := range opts.children {
-		children[c.id] = c
-	}
-	ctx, tsk := trace.NewTask(ctx, opts.id)
-	m := &Machine{
-		id:          opts.id,
-		children:    children,
-		done:        make(chan struct{}, 1),
-		cancel:      cancel,
-		middlewares: opts.middlewares,
-		ctx:         ctx,
-		workQueue:   make(chan *work, 1),
-		mu:          sync.RWMutex{},
-		routines:    map[string]Routine{},
-		tags:        opts.tags,
-		max:         opts.maxRoutines,
-		closeOnce:   sync.Once{},
-		doneOnce:    sync.Once{},
-		pubsub:      opts.pubsub,
-		started:     0,
-		finished:    0,
-		timeout:     opts.timeout,
-		deadline:    opts.deadline,
-		task:        tsk,
-		closers:     opts.closers,
-	}
-	pprof.Do(ctx, pprof.Labels(
-		"machine_id", m.id,
-		"machine_tags", strings.Join(m.tags, " "),
-	), func(machineCtx context.Context) {
-		m.ctx = machineCtx
-		go m.serve()
-	})
-	return m
-}
-
-// Active returns current active managed goroutine count
-func (p *Machine) Active() int {
-	return int(atomic.LoadInt64(&p.started) - atomic.LoadInt64(&p.finished))
-}
-
-// Total returns total goroutines that have been fully executed by the machine
-func (p *Machine) Total() int {
-	return int(atomic.LoadInt64(&p.finished))
-}
-
-// Tags returns the machine's tags
-func (p *Machine) Tags() []string {
-	sort.Strings(p.tags)
-	return p.tags
-}
-
-// Go calls the given function in a new goroutine and returns the goroutine's unique id
-// it is passed information about the goroutine at runtime via the Routine interface
-func (m *Machine) Go(fn Func, opts ...GoOpt) string {
-	if m.ctx.Err() == nil {
-		w := &work{
-			opts: &goOpts{},
-			fn:   nil,
-		}
-		for _, opt := range opts {
-			opt(w.opts)
-		}
-		if w.opts.id == "" {
-			w.opts.id = genUUID()
-		}
-		id := w.opts.id
-		w.fn = fn
-		m.workQueue <- w
-		return id
-	}
-	return ""
-}
-
-func (m *Machine) serve() {
-	ctx, cancel := context.WithCancel(m.ctx)
 	defer cancel()
-	interupt := make(chan os.Signal, 1)
-	signal.Notify(interupt, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(interupt)
+	ch, closer := p.setupSubscription(channel)
+	defer closer()
 	for {
 		select {
-		case <-interupt:
-			m.Cancel()
+		case <-ctx.Done():
 			return
-		case <-m.done:
-			m.Cancel()
-			return
-		case w := <-m.workQueue:
-			trace.WithRegion(ctx, "queue-wait", func() {
-				for _, ware := range w.opts.middlewares {
-					w.fn = ware(w.fn)
+		case msg := <-ch:
+			if opts.filter != nil {
+				res, err := opts.filter(ctx, msg)
+				if err != nil {
+					p.errChan <- err
 				}
-				for _, ware := range m.middlewares {
-					w.fn = ware(w.fn)
+				if !res {
+					continue
 				}
-				for x := m.Active(); x >= m.max; x = m.Active() {
-
-				}
-			})
-			trace.WithRegion(ctx, "queue-accept", func() {
-				atomic.AddInt64(&m.started, 1)
-				now := time.Now()
-				tags := strings.Join(w.opts.tags, " ")
-				pprof.Do(ctx, pprof.Labels(
-					"routine_id", w.opts.id,
-					"routine_tags", tags,
-					"routine_start", now.String(),
-				), func(ctx context.Context) {
-					ctx, cancel := context.WithCancel(ctx)
-					if w.opts.key != nil && w.opts.val != nil {
-						ctx = context.WithValue(ctx, w.opts.key, w.opts.val)
-					}
-					if w.opts.timeout != nil {
-						ctx, cancel = context.WithTimeout(ctx, *w.opts.timeout)
-					}
-					if w.opts.deadline != nil {
-						ctx, cancel = context.WithDeadline(ctx, *w.opts.deadline)
-					}
-					routine := &goRoutine{
-						machine:  m,
-						ctx:      ctx,
-						id:       w.opts.id,
-						tags:     w.opts.tags,
-						start:    now,
-						doneOnce: sync.Once{},
-						cancel:   cancel,
-					}
-					m.mu.Lock()
-					m.routines[w.opts.id] = routine
-					m.mu.Unlock()
-					go func(wrk *work, r *goRoutine) {
-						defer atomic.AddInt64(&m.finished, 1)
-						trace.WithRegion(ctx, tags, func() {
-							wrk.fn(r)
-							r.done()
-						})
-					}(w, routine)
-				})
-			})
+			}
+			contin, err := handler(ctx, msg)
+			if err != nil {
+				p.errChan <- err
+				continue
+			}
+			if !contin {
+				return
+			}
 		}
 	}
 }
 
-// Wait blocks until total active goroutine count reaches zero for the instance and all of it's children.
-// At least one goroutine must have finished in order for wait to un-block
-func (m *Machine) Wait() {
-	for m.Total() < 1 {
-
+func (p *machine) Publish(ctx context.Context, msg Message) {
+	p.subMu.RLock()
+	subscribers := p.subscriptions
+	p.subMu.RUnlock()
+	for k, channelSubscribers := range subscribers {
+		if globMatch(k, msg.GetChannel()) {
+			for _, ch := range channelSubscribers {
+				if ctx.Err() != nil {
+					return
+				}
+				ch <- msg
+			}
+		}
 	}
-	for _, child := range m.children {
-		child.Wait()
-	}
-
-	for m.Active() > 0 {
-	}
+	return
 }
 
-// Cancel cancels every goroutines context within the machine instance & it's children
-func (p *Machine) Cancel() {
-	p.closeOnce.Do(func() {
-		if p.cancel != nil {
-			p.cancel()
-			for _, child := range p.children {
-				child.Cancel()
+func (m *machine) Wait() {
+	done := make(chan struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case err := <-m.errChan:
+				if m.errHandler != nil {
+					m.errHandler(err)
+				}
+			}
+		}
+	}()
+	m.wg.Wait()
+	done <- struct{}{}
+}
+
+func (p *machine) Close() {
+	p.wg.Wait()
+	p.subMu.Lock()
+	defer p.subMu.Unlock()
+	for k, _ := range p.subscriptions {
+		delete(p.subscriptions, k)
+	}
+	close(p.errChan)
+}
+
+func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn CronFunc) {
+	m.Go(ctx, func(ctx context.Context) error {
+		ticker := time.NewTicker(timeout)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				contin, err := fn(ctx)
+				if err != nil {
+					m.errChan <- err
+				}
+				if !contin {
+					return nil
+				}
 			}
 		}
 	})
 }
 
-// Stats returns Goroutine information from the machine and all of it's children
-func (m *Machine) Stats() *Stats {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	copied := []RoutineStats{}
-	for _, v := range m.routines {
-		if v != nil {
-			copied = append(copied, RoutineStats{
-				PID:      v.PID(),
-				Start:    v.Start(),
-				Duration: v.Duration(),
-				Tags:     v.Tags(),
-			})
-		}
-	}
-	stats := &Stats{
-		ID:               m.id,
-		Tags:             m.tags,
-		TotalRoutines:    m.Total(),
-		ActiveRoutines:   len(copied),
-		Routines:         copied,
-		TotalChildren:    len(m.children),
-		HasParent:        m.parent != nil,
-		TotalMiddlewares: len(m.middlewares),
-		Timeout:          m.timeout,
-		Deadline:         m.deadline,
-	}
-
-	for _, child := range m.children {
-		stats.Children = append(stats.Children, child.Stats())
-	}
-	return stats
-}
-
-// Close completely closes the machine's pubsub instance & all of it's closer functions. It also closes all of it's child machines(if they exist)
-func (m *Machine) Close() {
-	m.doneOnce.Do(func() {
-		m.Cancel()
-		for _, child := range m.children {
-			child.Close()
-		}
-		m.done <- struct{}{}
-		m.pubsub.Close()
-		for _, c := range m.closers {
-			c()
+func (m *machine) Loop(ctx context.Context, fn LoopFunc) {
+	m.Go(ctx, func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				contin, err := fn(ctx)
+				if err != nil {
+					m.errChan <- err
+				}
+				if !contin {
+					return nil
+				}
+			}
 		}
 	})
-	m.task.End()
 }
 
-// Sub returns a nested Machine instance that is dependent on the parent machine's context.
-// It inherits the parent's pubsub implementation & middlewares if none are provided
-// Sub machine's do not inherit their parents max routine setting
-func (m *Machine) Sub(opts ...Opt) *Machine {
-	opts = append([]Opt{WithMiddlewares(m.middlewares...), WithPubSub(m.pubsub)}, opts...)
-	sub := New(m.ctx, opts...)
-	sub.parent = m
-	m.mu.Lock()
-	m.children[sub.ID()] = sub
-	m.mu.Unlock()
-	return sub
-}
-
-// Parent returns the parent Machine instance if it exists and nil if not.
-func (m *Machine) Parent() *Machine {
-	return m.parent
-}
-
-// HasRoutine returns true if the machine has a active routine with the given id
-func (m *Machine) HasRoutine(id string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.routines[id] != nil
-}
-
-// CancelRoutine cancels the context of the active routine with the given id if it exists.
-func (m *Machine) CancelRoutine(id string) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if r, ok := m.routines[id]; ok {
-		r.Cancel()
+func (p *machine) setupSubscription(channel string) (chan Message, func()) {
+	subId := rand.Int()
+	ch := make(chan Message, 10)
+	p.subMu.Lock()
+	if p.subscriptions[channel] == nil {
+		p.subscriptions[channel] = map[int]chan Message{}
+	}
+	p.subscriptions[channel][subId] = ch
+	p.subMu.Unlock()
+	return ch, func() {
+		p.subMu.Lock()
+		delete(p.subscriptions[channel], subId)
+		p.subMu.Unlock()
+		close(ch)
 	}
 }
 
-// PubSub returns the machine's underlying pubsub implementation
-func (m *Machine) PubSub() pubsub.PubSub {
-	return m.pubsub
-}
+func globMatch(pattern string, subj string) bool {
+	const matchAll = "*"
+	if pattern == subj {
+		return true
+	}
+	if pattern == matchAll {
+		return true
+	}
 
-// ID returns the machine instance's unique id.
-func (m *Machine) ID() string {
-	return m.id
+	parts := strings.Split(pattern, matchAll)
+	if len(parts) == 1 {
+		return subj == pattern
+	}
+	leadingGlob := strings.HasPrefix(pattern, matchAll)
+	trailingGlob := strings.HasSuffix(pattern, matchAll)
+	end := len(parts) - 1
+	for i := 0; i < end; i++ {
+		idx := strings.Index(subj, parts[i])
+
+		switch i {
+		case 0:
+			if !leadingGlob && idx != 0 {
+				return false
+			}
+		default:
+			if idx < 0 {
+				return false
+			}
+		}
+		subj = subj[idx+len(parts[i]):]
+	}
+	return trailingGlob || strings.HasSuffix(subj, parts[end])
 }

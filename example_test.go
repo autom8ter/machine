@@ -3,51 +3,81 @@ package machine_test
 import (
 	"context"
 	"fmt"
-	"github.com/autom8ter/machine"
+	"github.com/autom8ter/machine/v2"
+	"sort"
+	"sync"
 	"time"
 )
 
 func ExampleNew() {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	m := machine.New(ctx,
-		machine.WithMaxRoutines(10),
-		machine.WithMiddlewares(machine.PanicRecover()),
+	var (
+		m       = machine.New()
+		results []string
+		mu      sync.RWMutex
 	)
 	defer m.Close()
 
-	channelName := "acme.com"
-	const publisherID = "publisher"
-	// start another goroutine that publishes to the target channel every second for 5 seconds OR the routine's context cancels
-	m.Go(func(routine machine.Routine) {
-		fmt.Printf("%v | streaming msg to channel = %v stats = %s\n", routine.PID(), channelName, routine.Machine().Stats().String())
-		// publish message to channel
-		routine.Publish(channelName, "hey there bud!")
-	}, machine.GoWithTags("publish"),
-		machine.GoWithPID(publisherID),
-		machine.GoWithTimeout(5*time.Second),
-		machine.GoWithMiddlewares(
-			// run every second until context cancels
-			machine.Cron(time.NewTicker(1*time.Second)),
-		),
-	)
-	// start a goroutine that subscribes to all messages sent to the target channel for 3 seconds OR the routine's context cancels
-	m.Go(func(routine machine.Routine) {
-		routine.Subscribe(channelName, func(obj interface{}) bool {
-			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
-			return true
+	m.Go(ctx, func(ctx context.Context) error {
+		m.Subscribe(ctx, "accounting.*", func(ctx context.Context, msg machine.Message) (bool, error) {
+			mu.Lock()
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			mu.Unlock()
+			return true, nil
 		})
-	}, machine.GoWithTags("subscribe"),
-		machine.GoWithTimeout(3*time.Second),
-	)
-
-	// start a goroutine that subscribes to the channel until the publishing goroutine exits OR the routine's context cancels
-	m.Go(func(routine machine.Routine) {
-		routine.Subscribe(channelName, func(obj interface{}) bool {
-			fmt.Printf("%v | subscription msg received! channel = %v msg = %v stats = %s\n", routine.PID(), channelName, obj, m.Stats().String())
-			return m.HasRoutine(publisherID)
+		return nil
+	})
+	m.Go(ctx, func(ctx context.Context) error {
+		m.Subscribe(ctx, "engineering.*", func(ctx context.Context, msg machine.Message) (bool, error) {
+			mu.Lock()
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			mu.Unlock()
+			return true, nil
 		})
-	}, machine.GoWithTags("subscribeUntil"))
-
+		return nil
+	})
+	m.Go(ctx, func(ctx context.Context) error {
+		m.Subscribe(ctx, "human_resources.*", func(ctx context.Context, msg machine.Message) (bool, error) {
+			mu.Lock()
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			mu.Unlock()
+			return true, nil
+		})
+		return nil
+	})
+	m.Go(ctx, func(ctx context.Context) error {
+		m.Subscribe(ctx, "*", func(ctx context.Context, msg machine.Message) (bool, error) {
+			mu.Lock()
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			mu.Unlock()
+			return true, nil
+		})
+		return nil
+	})
+	<-time.After(1 * time.Second)
+	m.Publish(ctx, machine.Msg{
+		Channel: "human_resources.chat_room6",
+		Body:    "hello world human resources",
+	})
+	m.Publish(ctx, machine.Msg{
+		Channel: "accounting.chat_room2",
+		Body:    "hello world accounting",
+	})
+	m.Publish(ctx, machine.Msg{
+		Channel: "engineering.chat_room1",
+		Body:    "hello world engineering",
+	})
 	m.Wait()
+	sort.Strings(results)
+	for _, res := range results {
+		fmt.Print(res)
+	}
+	// Output:
+	//(accounting.chat_room2) received msg: hello world accounting
+	//(accounting.chat_room2) received msg: hello world accounting
+	//(engineering.chat_room1) received msg: hello world engineering
+	//(engineering.chat_room1) received msg: hello world engineering
+	//(human_resources.chat_room6) received msg: hello world human resources
+	//(human_resources.chat_room6) received msg: hello world human resources
 }
