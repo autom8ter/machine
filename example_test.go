@@ -3,7 +3,7 @@ package machine_test
 import (
 	"context"
 	"fmt"
-	"github.com/autom8ter/machine/v2"
+	"github.com/autom8ter/machine/v3"
 	"sort"
 	"sync"
 	"time"
@@ -22,7 +22,7 @@ func ExampleNew() {
 	m.Go(ctx, func(ctx context.Context) error {
 		m.Subscribe(ctx, "accounting.*", func(ctx context.Context, msg machine.Message) (bool, error) {
 			mu.Lock()
-			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
 			mu.Unlock()
 			return true, nil
 		})
@@ -31,7 +31,7 @@ func ExampleNew() {
 	m.Go(ctx, func(ctx context.Context) error {
 		m.Subscribe(ctx, "engineering.*", func(ctx context.Context, msg machine.Message) (bool, error) {
 			mu.Lock()
-			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
 			mu.Unlock()
 			return true, nil
 		})
@@ -40,7 +40,7 @@ func ExampleNew() {
 	m.Go(ctx, func(ctx context.Context) error {
 		m.Subscribe(ctx, "human_resources.*", func(ctx context.Context, msg machine.Message) (bool, error) {
 			mu.Lock()
-			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
 			mu.Unlock()
 			return true, nil
 		})
@@ -49,22 +49,22 @@ func ExampleNew() {
 	m.Go(ctx, func(ctx context.Context) error {
 		m.Subscribe(ctx, "*", func(ctx context.Context, msg machine.Message) (bool, error) {
 			mu.Lock()
-			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
 			mu.Unlock()
 			return true, nil
 		})
 		return nil
 	})
 	<-time.After(1 * time.Second)
-	m.Publish(ctx, machine.Msg{
+	m.Publish(ctx, machine.Message{
 		Channel: "human_resources.chat_room6",
 		Body:    "hello world human resources",
 	})
-	m.Publish(ctx, machine.Msg{
+	m.Publish(ctx, machine.Message{
 		Channel: "accounting.chat_room2",
 		Body:    "hello world accounting",
 	})
-	m.Publish(ctx, machine.Msg{
+	m.Publish(ctx, machine.Message{
 		Channel: "engineering.chat_room1",
 		Body:    "hello world engineering",
 	})

@@ -44,21 +44,25 @@ Highly concurrent and/or asynchronous applications include:
 ```go
 // Machine is an interface for highly asynchronous Go applications
 type Machine interface {
-	// Publish synchronously publishes the Message
-	Publish(ctx context.Context, msg Message)
-	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
-	// Glob matching IS supported for subscribing to multiple channels at once.
-	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
-	// Go asynchronously executes the given Func
-	Go(ctx context.Context, fn Func)
-	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
-	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
-	// Loop asynchronously executes the given function repeatedly UNTIL the context cancels OR false is returned by the LoopFunc
-	Loop(ctx context.Context, fn LoopFunc)
-	// Wait blocks until all active async functions(Loop, Go, Cron) exit
-	Wait()
-	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
-	Close()
+// Publish synchronously publishes the Message
+Publish(ctx context.Context, msg Message)
+// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
+// Glob matching IS supported for subscribing to multiple channels at once.
+Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
+// Subscribers returns total number of subscribers to the given channel
+Subscribers(channel string) int
+// Channels returns the channel names that messages have been sent to
+Channels() []string
+// Go asynchronously executes the given Func
+Go(ctx context.Context, fn Func)
+// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
+Cron(ctx context.Context, interval time.Duration, fn CronFunc)
+// Current returns the number of active jobs that are running concurrently
+Current() int
+// Wait blocks until all active async functions(Go, Cron) exit
+Wait()
+// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
+Close()
 }
 ```
 
@@ -77,7 +81,7 @@ type Machine interface {
   	m.Go(ctx, func(ctx context.Context) error {
   		m.Subscribe(ctx, "accounting.*", func(ctx context.Context, msg machine.Message) (bool, error) {
   			mu.Lock()
-  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
   			mu.Unlock()
   			return true, nil
   		})
@@ -86,7 +90,7 @@ type Machine interface {
   	m.Go(ctx, func(ctx context.Context) error {
   		m.Subscribe(ctx, "engineering.*", func(ctx context.Context, msg machine.Message) (bool, error) {
   			mu.Lock()
-  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
   			mu.Unlock()
   			return true, nil
   		})
@@ -95,7 +99,7 @@ type Machine interface {
   	m.Go(ctx, func(ctx context.Context) error {
   		m.Subscribe(ctx, "human_resources.*", func(ctx context.Context, msg machine.Message) (bool, error) {
   			mu.Lock()
-  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
   			mu.Unlock()
   			return true, nil
   		})
@@ -104,22 +108,22 @@ type Machine interface {
   	m.Go(ctx, func(ctx context.Context) error {
   		m.Subscribe(ctx, "*", func(ctx context.Context, msg machine.Message) (bool, error) {
   			mu.Lock()
-  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.GetChannel(), msg.GetBody()))
+  			results = append(results, fmt.Sprintf("(%s) received msg: %v\n", msg.Channel, msg.Body))
   			mu.Unlock()
   			return true, nil
   		})
   		return nil
   	})
   	<-time.After(1 * time.Second)
-  	m.Publish(ctx, machine.Msg{
+  	m.Publish(ctx, machine.Message{
   		Channel: "human_resources.chat_room6",
   		Body:    "hello world human resources",
   	})
-  	m.Publish(ctx, machine.Msg{
+  	m.Publish(ctx, machine.Message{
   		Channel: "accounting.chat_room2",
   		Body:    "hello world accounting",
   	})
-  	m.Publish(ctx, machine.Msg{
+  	m.Publish(ctx, machine.Message{
   		Channel: "engineering.chat_room1",
   		Body:    "hello world engineering",
   	})
