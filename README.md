@@ -1,11 +1,11 @@
-# Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine/v2?status.svg)](https://godoc.org/github.com/autom8ter/machine/v2)
+# Machine [![GoDoc](https://godoc.org/github.com/autom8ter/machine/v3?status.svg)](https://godoc.org/github.com/autom8ter/machine/v3)
 
 ![concurrency](images/concurrency.jpg)
 
 
-`import "github.com/autom8ter/machine/v2"`
+`import "github.com/autom8ter/machine/v3"`
 
-[Machine](https://pkg.go.dev/github.com/autom8ter/machine/v2#Machine) is a zero dependency library for highly concurrent Go applications. 
+[Machine](https://pkg.go.dev/github.com/autom8ter/machine/v3#Machine) is a zero dependency library for highly concurrent Go applications. 
 It is inspired by [`errgroup`](https://pkg.go.dev/golang.org/x/sync/errgroup)`.`[`Group`](https://pkg.go.dev/golang.org/x/sync/errgroup#Group) with extra bells & whistles:
 - In memory Publish Subscribe for asynchronously broadcasting & consuming messages in memory
 - Asynchronous worker groups similar to errgroup.Group
