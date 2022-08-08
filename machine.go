@@ -2,6 +2,7 @@ package machine
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
@@ -50,7 +51,8 @@ type Machine interface {
 
 // SubscriptionOptions holds config options for a subscription
 type SubscriptionOptions struct {
-	filter MessageFilterFunc
+	filter         MessageFilterFunc
+	subscriptionID string
 }
 
 // SubscriptionOpt configures a subscription
@@ -63,10 +65,18 @@ func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
 	}
 }
 
+// WithSubscriptionID is a subscription option that sets the subscription id - if multiple consumers have the same subscritpion id,
+// a message will be broadcasted to just one of the consumers
+func WithSubscriptionID(id string) SubscriptionOpt {
+	return func(options *SubscriptionOptions) {
+
+	}
+}
+
 type machine struct {
 	errHandler    func(err error)
 	max           int
-	subscriptions map[string]map[int]chan Message
+	subscriptions map[string]map[string]chan Message
 	current       chan struct{}
 	subMu         sync.RWMutex
 	errChan       chan error
@@ -115,7 +125,7 @@ func New(opts ...Opt) Machine {
 		errHandler:    options.errHandler,
 		max:           options.maxRoutines,
 		current:       make(chan struct{}, options.maxRoutines),
-		subscriptions: map[string]map[int]chan Message{},
+		subscriptions: map[string]map[string]chan Message{},
 		subMu:         sync.RWMutex{},
 		errChan:       make(chan error),
 		wg:            sync.WaitGroup{},
@@ -161,9 +171,13 @@ func (p *machine) Subscribe(ctx context.Context, channel string, handler Message
 	for _, o := range options {
 		o(opts)
 	}
+	var subID string
+	if opts.subscriptionID == "" {
+		subID = opts.subscriptionID
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	ch, closer := p.setupSubscription(channel)
+	ch, closer := p.setupSubscription(channel, subID)
 	defer closer()
 	for {
 		select {
@@ -273,12 +287,14 @@ func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn CronFunc) 
 	})
 }
 
-func (p *machine) setupSubscription(channel string) (chan Message, func()) {
-	subId := rand.Int()
+func (p *machine) setupSubscription(channel, subId string) (chan Message, func()) {
+	if subId == "" {
+		subId = fmt.Sprintf("%v", rand.Int())
+	}
 	ch := make(chan Message, 1)
 	p.subMu.Lock()
 	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[int]chan Message{}
+		p.subscriptions[channel] = map[string]chan Message{}
 	}
 	p.subscriptions[channel][subId] = ch
 	p.subMu.Unlock()
