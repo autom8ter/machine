@@ -26,10 +26,6 @@ type Machine interface {
 	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
 	// Glob matching IS supported for subscribing to multiple channels at once.
 	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) error
-	// Subscribers returns total number of subscribers to the given channel
-	Subscribers(channel string) int
-	// Subscriptions returns the channel names/patterns that subscribers are listening on
-	Subscriptions() []string
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
 	// Current returns the number of active jobs that are running concurrently
@@ -66,9 +62,8 @@ func WithSubscriptionID(id string) SubscriptionOpt {
 
 type machine struct {
 	max           int
-	subscriptions map[string]map[string]chan Message
+	subscriptions *sync.Map
 	current       chan struct{}
-	subMu         sync.RWMutex
 	errChan       chan error
 	wg            sync.WaitGroup
 }
@@ -100,9 +95,8 @@ func New(opts ...Opt) Machine {
 	return &machine{
 		max:           options.maxRoutines,
 		current:       make(chan struct{}, options.maxRoutines),
-		subscriptions: map[string]map[string]chan Message{},
-		subMu:         sync.RWMutex{},
-		errChan:       make(chan error),
+		subscriptions: &sync.Map{},
+		errChan:       make(chan error, 100),
 		wg:            sync.WaitGroup{},
 	}
 }
@@ -179,50 +173,38 @@ func (p *machine) Subscribe(ctx context.Context, channel string, handler Message
 	}
 }
 
-func (m *machine) Subscribers(channel string) int {
-	m.subMu.RLock()
-	defer m.subMu.RUnlock()
-	return len(m.subscriptions[channel])
-}
-
-func (m *machine) Subscriptions() []string {
-	m.subMu.RLock()
-	defer m.subMu.RUnlock()
-	var channels []string
-	for ch, _ := range m.subscriptions {
-		channels = append(channels, ch)
-	}
-	return channels
-}
-
 func (p *machine) Publish(ctx context.Context, msg Message) {
-	p.subMu.RLock()
-	defer p.subMu.RUnlock()
-	for k, channelSubscribers := range p.subscriptions {
-		if globMatch(k, msg.Channel) {
-			for _, ch := range channelSubscribers {
-				if ctx.Err() != nil {
-					return
-				}
-				ch <- msg
+	p.subscriptions.Range(func(key, value any) bool {
+
+		split := strings.Split(key.(string), "|||")
+
+		if globMatch(split[0], msg.Channel) {
+			if ctx.Err() != nil {
+				return false
 			}
+			value.(chan Message) <- msg
 		}
-	}
+		return true
+	})
 	return
 }
 
 func (m *machine) Wait() error {
 	m.wg.Wait()
-	return <-m.errChan
+	select {
+	case err := <-m.errChan:
+		return err
+	default:
+		return nil
+	}
 }
 
 func (p *machine) Close() {
 	p.wg.Wait()
-	p.subMu.Lock()
-	defer p.subMu.Unlock()
-	for k, _ := range p.subscriptions {
-		delete(p.subscriptions, k)
-	}
+	p.subscriptions.Range(func(key, value any) bool {
+		p.subscriptions.Delete(key)
+		return true
+	})
 	close(p.errChan)
 }
 
@@ -231,16 +213,10 @@ func (p *machine) setupSubscription(channel, subId string) (chan Message, func()
 		subId = fmt.Sprintf("%v", rand.Int())
 	}
 	ch := make(chan Message, 1)
-	p.subMu.Lock()
-	if p.subscriptions[channel] == nil {
-		p.subscriptions[channel] = map[string]chan Message{}
-	}
-	p.subscriptions[channel][subId] = ch
-	p.subMu.Unlock()
+	key := fmt.Sprintf("%s|||%s", channel, subId)
+	p.subscriptions.Store(key, ch)
 	return ch, func() {
-		p.subMu.Lock()
-		delete(p.subscriptions[channel], subId)
-		p.subMu.Unlock()
+		p.subscriptions.Delete(key)
 		close(ch)
 	}
 }

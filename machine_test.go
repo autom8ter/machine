@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/autom8ter/machine/v3"
+	"github.com/autom8ter/machine/v4"
 )
 
 func Test(t *testing.T) {
@@ -28,17 +28,18 @@ func Test(t *testing.T) {
 		})
 	})
 	time.Sleep(1 * time.Second)
-	m.Wait()
+	for i := 0; i < 3; i++ {
+		m.Publish(ctx, machine.Message{
+			Channel: "testing",
+			Body:    "hello world",
+		})
+	}
+	if err := m.Wait(); err != nil {
+		t.Fatal(err)
+	}
 	if count < 3 {
-		t.Fatal("count < 3")
+		t.Fatal("count < 3", count)
 	}
-	if channels := len(m.Subscriptions()); channels != 1 {
-		t.Fatalf("expected 1 total channel, got %v", m.Subscriptions())
-	}
-	if subscribers := m.Subscribers("testing.*"); subscribers != 0 {
-		t.Fatalf("expected 0 total subscriber, got %v", subscribers)
-	}
-
 }
 
 func TestWithThrottledRoutines(t *testing.T) {

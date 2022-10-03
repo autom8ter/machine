@@ -1,3 +1,3 @@
-module github.com/autom8ter/machine/v3
+module github.com/autom8ter/machine/v4
 
-go 1.15
+go 1.18
