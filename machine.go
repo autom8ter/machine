@@ -3,12 +3,9 @@ package machine
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
-	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 // Handler is a first class that is executed against the inbound message in a subscription.
@@ -22,29 +19,23 @@ type MessageFilterFunc func(ctx context.Context, msg Message) (bool, error)
 // Func is a first class function that is asynchronously executed.
 type Func func(ctx context.Context) error
 
-// CronFunc is a first class function that is asynchronously executed on a timed interval.
-// Return false to indicate that the cron should end
-type CronFunc func(ctx context.Context) (bool, error)
-
 // Machine is an interface for highly asynchronous Go applications
 type Machine interface {
 	// Publish synchronously publishes the Message
 	Publish(ctx context.Context, msg Message)
 	// Subscribe synchronously subscribes to messages on a given channel,  executing the given HandlerFunc UNTIL the context cancels OR false is returned by the HandlerFunc.
 	// Glob matching IS supported for subscribing to multiple channels at once.
-	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, opts ...SubscriptionOpt)
+	Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) error
 	// Subscribers returns total number of subscribers to the given channel
 	Subscribers(channel string) int
 	// Subscriptions returns the channel names/patterns that subscribers are listening on
 	Subscriptions() []string
 	// Go asynchronously executes the given Func
 	Go(ctx context.Context, fn Func)
-	// Cron asynchronously executes the given function on a timed interval UNTIL the context cancels OR false is returned by the CronFunc
-	Cron(ctx context.Context, interval time.Duration, fn CronFunc)
 	// Current returns the number of active jobs that are running concurrently
 	Current() int
-	// Wait blocks until all active async functions(Go, Cron) exit
-	Wait()
+	// Wait blocks until all active async functions(Go) exit
+	Wait() error
 	// Close blocks until all active routine's exit(calls Wait) then closes all active subscriptions
 	Close()
 }
@@ -74,7 +65,6 @@ func WithSubscriptionID(id string) SubscriptionOpt {
 }
 
 type machine struct {
-	errHandler    func(err error)
 	max           int
 	subscriptions map[string]map[string]chan Message
 	current       chan struct{}
@@ -86,7 +76,6 @@ type machine struct {
 // Options holds config options for a machine instance
 type Options struct {
 	maxRoutines int
-	errHandler  func(err error)
 }
 
 // Opt configures a machine instance
@@ -99,30 +88,16 @@ func WithThrottledRoutines(max int) Opt {
 	}
 }
 
-// WithErrHandler overrides the default machine error handler
-func WithErrHandler(errHandler func(err error)) Opt {
-	return func(o *Options) {
-		o.errHandler = errHandler
-	}
-}
-
 // New creates a new Machine instance with the given options(if present)
 func New(opts ...Opt) Machine {
 	options := &Options{}
 	for _, o := range opts {
 		o(options)
 	}
-	if options.errHandler == nil {
-		logger := log.New(os.Stderr, "machine/v2", log.Flags())
-		options.errHandler = func(err error) {
-			logger.Printf("runtime error: %v", err)
-		}
-	}
 	if options.maxRoutines <= 0 {
 		options.maxRoutines = 1000
 	}
 	return &machine{
-		errHandler:    options.errHandler,
 		max:           options.maxRoutines,
 		current:       make(chan struct{}, options.maxRoutines),
 		subscriptions: map[string]map[string]chan Message{},
@@ -166,7 +141,7 @@ type Message struct {
 	Body    interface{}
 }
 
-func (p *machine) Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) {
+func (p *machine) Subscribe(ctx context.Context, channel string, handler MessageHandlerFunc, options ...SubscriptionOpt) error {
 	opts := &SubscriptionOptions{}
 	for _, o := range options {
 		o(opts)
@@ -182,24 +157,23 @@ func (p *machine) Subscribe(ctx context.Context, channel string, handler Message
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case msg := <-ch:
 			if opts.filter != nil {
-				res, err := opts.filter(ctx, msg)
+				shouldHandle, err := opts.filter(ctx, msg)
 				if err != nil {
-					p.errChan <- err
+					return err
 				}
-				if !res {
+				if !shouldHandle {
 					continue
 				}
 			}
 			contin, err := handler(ctx, msg)
 			if err != nil {
-				p.errChan <- err
-				continue
+				return err
 			}
 			if !contin {
-				return
+				return nil
 			}
 		}
 	}
@@ -227,7 +201,6 @@ func (p *machine) Publish(ctx context.Context, msg Message) {
 	for k, channelSubscribers := range p.subscriptions {
 		if globMatch(k, msg.Channel) {
 			for _, ch := range channelSubscribers {
-
 				if ctx.Err() != nil {
 					return
 				}
@@ -238,22 +211,9 @@ func (p *machine) Publish(ctx context.Context, msg Message) {
 	return
 }
 
-func (m *machine) Wait() {
-	done := make(chan struct{}, 1)
-	go func() {
-		for {
-			select {
-			case <-done:
-				return
-			case err := <-m.errChan:
-				if m.errHandler != nil {
-					m.errHandler(err)
-				}
-			}
-		}
-	}()
+func (m *machine) Wait() error {
 	m.wg.Wait()
-	done <- struct{}{}
+	return <-m.errChan
 }
 
 func (p *machine) Close() {
@@ -264,27 +224,6 @@ func (p *machine) Close() {
 		delete(p.subscriptions, k)
 	}
 	close(p.errChan)
-}
-
-func (m *machine) Cron(ctx context.Context, timeout time.Duration, fn CronFunc) {
-	m.Go(ctx, func(ctx context.Context) error {
-		ticker := time.NewTicker(timeout)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-ticker.C:
-				contin, err := fn(ctx)
-				if err != nil {
-					m.errChan <- err
-				}
-				if !contin {
-					return nil
-				}
-			}
-		}
-	})
 }
 
 func (p *machine) setupSubscription(channel, subId string) (chan Message, func()) {
