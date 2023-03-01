@@ -56,7 +56,7 @@ func WithFilter(filter MessageFilterFunc) SubscriptionOpt {
 // a message will be broadcasted to just one of the consumers
 func WithSubscriptionID(id string) SubscriptionOpt {
 	return func(options *SubscriptionOptions) {
-
+		options.subscriptionID = id
 	}
 }
 
@@ -141,7 +141,7 @@ func (p *machine) Subscribe(ctx context.Context, channel string, handler Message
 		o(opts)
 	}
 	var subID string
-	if opts.subscriptionID == "" {
+	if opts.subscriptionID != "" {
 		subID = opts.subscriptionID
 	}
 	ctx, cancel := context.WithCancel(ctx)
